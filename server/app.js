@@ -45,15 +45,45 @@ app.get('/api/test', async (req, res) => {
         // Test races table
         const races = await db.query('SELECT COUNT(*) as count FROM races');
         
+        // Test games table structure
+        const gamesStructure = await db.query('DESCRIBE games');
+        
+        // Test game_players table structure  
+        const playersStructure = await db.query('DESCRIBE game_players');
+        
         res.json({
             status: 'OK',
             database: 'Connected',
             testQuery: testResult,
             racesCount: races[0].count,
+            gamesTableStructure: gamesStructure,
+            playersTableStructure: playersStructure,
             timestamp: new Date().toISOString()
         });
     } catch (error) {
         console.error('API Test Error:', error);
+        res.status(500).json({
+            status: 'ERROR',
+            error: error.message,
+            stack: error.stack
+        });
+    }
+});
+
+app.get('/api/test-lobby', async (req, res) => {
+    try {
+        // Test create game function
+        const createResult = await lobbyController.createGame(
+            'Test Game', 4, 30, 'Test Player', 'test-socket-id'
+        );
+        
+        res.json({
+            status: 'OK',
+            createGameTest: createResult,
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        console.error('Lobby Test Error:', error);
         res.status(500).json({
             status: 'ERROR',
             error: error.message,

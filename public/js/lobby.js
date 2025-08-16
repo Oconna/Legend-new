@@ -1,10 +1,4 @@
-leaveLobby() {
-        hideModal('gameLobbyModal');
-        this.currentGameId = null;
-        this.isReady = false;
-        this.isHost = false;
-        
-        // Lobby JavaScript - Frontend logic for game lobby
+// Lobby JavaScript - Frontend logic for game lobby
 
 class LobbyManager {
     constructor() {

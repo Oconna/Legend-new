@@ -636,8 +636,59 @@ input:focus, select:focus {
     border-left-color: #f39c12;
 }
 
-.notification.info {
-    border-left-color: #3498db;
+/* Lobby Player List */
+.lobby-player-item {
+    list-style: none;
+    background: #f8f9fa;
+    margin-bottom: 0.5rem;
+    padding: 0.75rem;
+    border-radius: 6px;
+    border-left: 4px solid #3498db;
+}
+
+.lobby-player-item .player-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.lobby-player-item .player-name {
+    font-weight: bold;
+    color: #2c3e50;
+}
+
+.lobby-player-item .player-status {
+    font-size: 0.9rem;
+    color: #7f8c8d;
+}
+
+#modalPlayersList {
+    padding: 0;
+    margin: 1rem 0;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+#readyStatusText {
+    font-weight: bold;
+    color: #2c3e50;
+    margin-top: 0.5rem;
+}
+
+#startGameBtn {
+    margin-left: 0.5rem;
+}
+
+#startGameBtn:disabled {
+    background: #bdc3c7;
+    cursor: not-allowed;
+}
+
+.lobby-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin: 1rem 0;
+    flex-wrap: wrap;
 }
 
 /* Responsive Design */

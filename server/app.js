@@ -62,10 +62,15 @@ io.on('connection', (socket) => {
     // Lobby Events
     socket.on('create_game', async (data) => {
         try {
-            const result = await lobbyController.createGame(data.gameName, data.maxPlayers, data.mapSize, data.playerName);
+            const result = await lobbyController.createGame(data.gameName, data.maxPlayers, data.mapSize, data.playerName, socket.id);
             if (result.success) {
                 socket.join(result.gameId);
                 socket.emit('game_created', result);
+                
+                // Send current lobby state
+                const players = await lobbyController.getGamePlayers(result.gameId);
+                io.to(result.gameId).emit('lobby_players_updated', players);
+                
                 io.emit('games_updated', await lobbyController.getAvailableGames());
             } else {
                 socket.emit('error', result.message);
@@ -81,10 +86,17 @@ io.on('connection', (socket) => {
             if (result.success) {
                 socket.join(data.gameId);
                 socket.emit('game_joined', result);
+                
+                // Notify other players
                 socket.to(data.gameId).emit('player_joined', {
                     playerName: data.playerName,
                     currentPlayers: result.currentPlayers
                 });
+                
+                // Send updated player list to all players in lobby
+                const players = await lobbyController.getGamePlayers(data.gameId);
+                io.to(data.gameId).emit('lobby_players_updated', players);
+                
                 io.emit('games_updated', await lobbyController.getAvailableGames());
             } else {
                 socket.emit('error', result.message);
@@ -96,24 +108,39 @@ io.on('connection', (socket) => {
 
     socket.on('player_ready', async (data) => {
         try {
-            const result = await lobbyController.setPlayerReady(data.gameId, data.playerName, true);
+            const result = await lobbyController.setPlayerReady(data.gameId, data.playerName, data.ready);
             if (result.success) {
+                // Send updated player list to all players in lobby
+                const players = await lobbyController.getGamePlayers(data.gameId);
+                io.to(data.gameId).emit('lobby_players_updated', players);
+                
                 io.to(data.gameId).emit('player_ready_status', {
                     playerName: data.playerName,
-                    ready: true,
-                    allReady: result.allReady
+                    ready: data.ready,
+                    allReady: result.allReady,
+                    readyCount: result.readyCount,
+                    totalPlayers: result.totalPlayers
                 });
-
-                if (result.allReady) {
-                    // Starte Rassenwahl Phase
-                    await gameController.startRaceSelection(data.gameId);
-                    io.to(data.gameId).emit('start_race_selection', {
-                        message: 'Alle Spieler bereit! Rassenwahl beginnt...'
-                    });
-                }
             }
         } catch (error) {
             socket.emit('error', 'Fehler bei der Bereitschaftsanzeige');
+        }
+    });
+
+    socket.on('start_game', async (data) => {
+        try {
+            const result = await lobbyController.startGame(data.gameId, data.playerName);
+            if (result.success) {
+                // Starte Rassenwahl Phase
+                await gameController.startRaceSelection(data.gameId);
+                io.to(data.gameId).emit('start_race_selection', {
+                    message: 'Spiel gestartet! Rassenwahl beginnt...'
+                });
+            } else {
+                socket.emit('error', result.message);
+            }
+        } catch (error) {
+            socket.emit('error', 'Fehler beim Starten des Spiels');
         }
     });
 

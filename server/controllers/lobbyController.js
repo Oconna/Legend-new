@@ -2,7 +2,7 @@ const db = require('../config/database');
 
 class LobbyController {
     
-    async createGame(gameName, maxPlayers, mapSize, playerName) {
+    async createGame(gameName, maxPlayers, mapSize, playerName, socketId) {
         try {
             // Validierung
             if (!gameName || gameName.trim().length === 0) {
@@ -35,10 +35,10 @@ class LobbyController {
 
             const gameId = result.insertId;
 
-            // Füge ersten Spieler hinzu
+            // Füge ersten Spieler hinzu (Host)
             await db.query(
-                'INSERT INTO game_players (game_id, player_name) VALUES (?, ?)',
-                [gameId, playerName.trim()]
+                'INSERT INTO game_players (game_id, player_name, socket_id, is_host) VALUES (?, ?, ?, ?)',
+                [gameId, playerName.trim(), socketId, true]
             );
 
             // Update current_players count
@@ -50,9 +50,12 @@ class LobbyController {
             return {
                 success: true,
                 gameId: gameId,
+                gameName: gameName.trim(),
                 message: 'Spiel erfolgreich erstellt',
                 currentPlayers: 1,
-                maxPlayers: maxPlayers
+                maxPlayers: maxPlayers,
+                mapSize: mapSize,
+                isHost: true
             };
 
         } catch (error) {
@@ -110,9 +113,12 @@ class LobbyController {
             return {
                 success: true,
                 gameId: gameId,
+                gameName: gameData.name,
                 message: 'Spiel erfolgreich beigetreten',
                 currentPlayers: newPlayerCount,
-                maxPlayers: gameData.max_players
+                maxPlayers: gameData.max_players,
+                mapSize: gameData.map_size,
+                isHost: false
             };
 
         } catch (error) {
@@ -137,22 +143,59 @@ class LobbyController {
 
             const allReady = players[0].total > 1 && players[0].ready_count === players[0].total;
 
-            if (allReady) {
-                // Update game status to race selection
-                await db.query(
-                    'UPDATE games SET status = "race_selection" WHERE id = ?',
-                    [gameId]
-                );
-            }
-
             return {
                 success: true,
-                allReady: allReady
+                allReady: allReady,
+                readyCount: players[0].ready_count,
+                totalPlayers: players[0].total
             };
 
         } catch (error) {
             console.error('Error setting player ready:', error);
             return { success: false, message: 'Fehler bei der Bereitschaftsanzeige' };
+        }
+    }
+
+    async startGame(gameId, playerName) {
+        try {
+            // Prüfe ob Spieler der Host ist
+            const host = await db.query(
+                'SELECT id FROM game_players WHERE game_id = ? AND player_name = ? AND is_host = true',
+                [gameId, playerName]
+            );
+
+            if (host.length === 0) {
+                return { success: false, message: 'Nur der Host kann das Spiel starten' };
+            }
+
+            // Prüfe ob alle Spieler bereit sind
+            const players = await db.query(
+                'SELECT COUNT(*) as total, SUM(is_ready) as ready_count FROM game_players WHERE game_id = ? AND is_active = true',
+                [gameId]
+            );
+
+            if (players[0].total < 2) {
+                return { success: false, message: 'Mindestens 2 Spieler erforderlich' };
+            }
+
+            if (players[0].ready_count !== players[0].total) {
+                return { success: false, message: 'Nicht alle Spieler sind bereit' };
+            }
+
+            // Update game status to race selection
+            await db.query(
+                'UPDATE games SET status = "race_selection" WHERE id = ?',
+                [gameId]
+            );
+
+            return {
+                success: true,
+                message: 'Spiel wird gestartet...'
+            };
+
+        } catch (error) {
+            console.error('Error starting game:', error);
+            return { success: false, message: 'Fehler beim Starten des Spiels' };
         }
     }
 

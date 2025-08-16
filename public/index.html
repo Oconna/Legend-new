@@ -86,16 +86,20 @@
                         
                         <div class="players-list">
                             <h4>Spieler in der Lobby:</h4>
-                            <ul id="modalPlayersList"></ul>
+                            <ul id="modalPlayersList">
+                                <!-- Player list will be populated here -->
+                            </ul>
                         </div>
                         
                         <div class="lobby-actions">
                             <button id="readyBtn" class="btn btn-success">Bereit</button>
+                            <button id="startGameBtn" class="btn btn-primary" style="display: none;">Spiel starten</button>
                             <button id="leaveLobbyBtn" class="btn btn-danger">Lobby verlassen</button>
                         </div>
                         
                         <div class="lobby-status">
                             <p id="lobbyStatusText">Warte auf andere Spieler...</p>
+                            <p id="readyStatusText">Bereit: <span id="readyCount">0</span>/<span id="totalPlayers">0</span></p>
                         </div>
                     </div>
                 </div>

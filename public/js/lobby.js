@@ -1,4 +1,10 @@
-// Lobby JavaScript - Frontend logic for game lobby
+leaveLobby() {
+        hideModal('gameLobbyModal');
+        this.currentGameId = null;
+        this.isReady = false;
+        this.isHost = false;
+        
+        // Lobby JavaScript - Frontend logic for game lobby
 
 class LobbyManager {
     constructor() {
@@ -8,6 +14,7 @@ class LobbyManager {
         this.availableRaces = [];
         this.currentPlayers = [];
         this.isReady = false;
+        this.isHost = false;
         
         this.init();
     }
@@ -41,11 +48,15 @@ class LobbyManager {
         // Game events
         this.socket.on('game_created', (data) => {
             showNotification('Spiel erfolgreich erstellt!', 'success');
+            this.isHost = data.isHost;
+            this.setupLobbyModal(data.gameName, data.maxPlayers, data.mapSize);
             this.joinGameLobby(data.gameId);
         });
 
         this.socket.on('game_joined', (data) => {
             showNotification('Spiel erfolgreich beigetreten!', 'success');
+            this.isHost = data.isHost;
+            this.setupLobbyModal(data.gameName, data.maxPlayers, data.mapSize);
             this.joinGameLobby(data.gameId);
         });
 
@@ -55,15 +66,15 @@ class LobbyManager {
 
         this.socket.on('player_joined', (data) => {
             showNotification(`${data.playerName} ist dem Spiel beigetreten`, 'info');
-            this.updateLobbyPlayerCount(data.currentPlayers);
+        });
+
+        this.socket.on('lobby_players_updated', (players) => {
+            this.updateLobbyPlayersList(players);
         });
 
         this.socket.on('player_ready_status', (data) => {
             showNotification(`${data.playerName} ist ${data.ready ? 'bereit' : 'nicht bereit'}`, 'info');
-            
-            if (data.allReady) {
-                showNotification('Alle Spieler bereit! Rassenwahl startet...', 'success');
-            }
+            this.updateReadyStatus(data);
         });
 
         this.socket.on('start_race_selection', (data) => {
@@ -105,6 +116,10 @@ class LobbyManager {
         // Lobby modal buttons
         document.getElementById('readyBtn').addEventListener('click', () => {
             this.toggleReady();
+        });
+
+        document.getElementById('startGameBtn').addEventListener('click', () => {
+            this.startGame();
         });
 
         document.getElementById('leaveLobbyBtn').addEventListener('click', () => {
@@ -250,12 +265,61 @@ class LobbyManager {
         document.getElementById('modalMapSize').textContent = mapSize;
         document.getElementById('modalMapSizeY').textContent = mapSize;
         
+        // Show/hide start button based on host status
+        const startBtn = document.getElementById('startGameBtn');
+        if (this.isHost) {
+            startBtn.style.display = 'inline-block';
+        } else {
+            startBtn.style.display = 'none';
+        }
+        
         showModal('gameLobbyModal');
     }
 
     joinGameLobby(gameId) {
         this.currentGameId = gameId;
         // The modal is already shown, just update the game ID
+    }
+
+    updateLobbyPlayersList(players) {
+        const playersList = document.getElementById('modalPlayersList');
+        
+        playersList.innerHTML = players.map(player => `
+            <li class="lobby-player-item">
+                <div class="player-info">
+                    <span class="player-name">
+                        ${player.player_name}
+                        ${player.is_host ? ' 👑' : ''}
+                    </span>
+                    <span class="player-status">
+                        ${player.is_ready ? '✅ Bereit' : '⏳ Wartet'}
+                    </span>
+                </div>
+            </li>
+        `).join('');
+        
+        // Update player count
+        document.getElementById('modalPlayerCount').textContent = players.length;
+        document.getElementById('totalPlayers').textContent = players.length;
+        
+        this.currentPlayers = players;
+    }
+
+    updateReadyStatus(data) {
+        document.getElementById('readyCount').textContent = data.readyCount;
+        document.getElementById('totalPlayers').textContent = data.totalPlayers;
+        
+        if (data.allReady && this.isHost) {
+            document.getElementById('lobbyStatusText').textContent = 'Alle Spieler bereit! Du kannst das Spiel starten.';
+            document.getElementById('startGameBtn').disabled = false;
+        } else if (data.allReady) {
+            document.getElementById('lobbyStatusText').textContent = 'Alle Spieler bereit! Warte auf Host...';
+        } else {
+            document.getElementById('lobbyStatusText').textContent = 'Warte auf andere Spieler...';
+            if (this.isHost) {
+                document.getElementById('startGameBtn').disabled = true;
+            }
+        }
     }
 
     updateLobbyPlayerCount(currentPlayers) {
@@ -269,7 +333,8 @@ class LobbyManager {
         
         this.socket.emit('player_ready', {
             gameId: this.currentGameId,
-            playerName: this.playerName
+            playerName: this.playerName,
+            ready: this.isReady
         });
 
         const readyBtn = document.getElementById('readyBtn');
@@ -284,16 +349,31 @@ class LobbyManager {
         }
     }
 
+    startGame() {
+        if (!this.currentGameId || !this.isHost) return;
+
+        this.socket.emit('start_game', {
+            gameId: this.currentGameId,
+            playerName: this.playerName
+        });
+    }
+
     leaveLobby() {
         hideModal('gameLobbyModal');
         this.currentGameId = null;
         this.isReady = false;
+        this.isHost = false;
         
         // Reset ready button
         const readyBtn = document.getElementById('readyBtn');
         readyBtn.textContent = 'Bereit';
         readyBtn.classList.remove('btn-secondary');
         readyBtn.classList.add('btn-success');
+        
+        // Reset start button
+        const startBtn = document.getElementById('startGameBtn');
+        startBtn.style.display = 'none';
+        startBtn.disabled = true;
         
         // Refresh games list
         this.loadAvailableGames();

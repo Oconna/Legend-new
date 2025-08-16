@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Strategiespiel - Spiel</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="game-body">
+    <div class="game-container">
+        <!-- Game Header -->
+        <header class="game-header-bar">
+            <div class="game-info">
+                <h2 id="gameTitle">Strategiespiel</h2>
+                <div class="game-stats">
+                    <span class="stat">
+                        <strong>Runde:</strong> <span id="currentTurn">1</span>
+                    </span>
+                    <span class="stat">
+                        <strong>Aktiver Spieler:</strong> <span id="currentPlayer">-</span>
+                    </span>
+                    <span class="stat">
+                        <strong>Dein Gold:</strong> <span id="playerGold">1000</span>
+                    </span>
+                </div>
+            </div>
+            <div class="game-actions">
+                <button id="endTurnBtn" class="btn btn-primary">Zug beenden</button>
+                <button id="leaveGameBtn" class="btn btn-danger">Spiel verlassen</button>
+            </div>
+        </header>
+
+        <!-- Main Game Area -->
+        <main class="game-main">
+            <!-- Left Sidebar -->
+            <aside class="left-sidebar">
+                <div class="players-panel">
+                    <h3>Spieler</h3>
+                    <div id="playersStatus" class="players-status">
+                        <!-- Player list will be populated here -->
+                    </div>
+                </div>
+
+                <div class="unit-info-panel">
+                    <h3>Einheiten Info</h3>
+                    <div id="selectedUnitInfo" class="unit-info">
+                        <p>Wähle eine Einheit aus</p>
+                    </div>
+                </div>
+
+                <div class="actions-panel">
+                    <h3>Aktionen</h3>
+                    <div class="action-buttons">
+                        <button id="moveUnitBtn" class="btn btn-action" disabled>Bewegen</button>
+                        <button id="attackBtn" class="btn btn-action" disabled>Angreifen</button>
+                        <button id="buildUnitBtn" class="btn btn-action" disabled>Einheit bauen</button>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Game Map -->
+            <div class="map-container">
+                <div class="map-controls">
+                    <button id="zoomInBtn" class="btn btn-small">+</button>
+                    <button id="zoomOutBtn" class="btn btn-small">-</button>
+                    <button id="centerMapBtn" class="btn btn-small">🎯</button>
+                </div>
+                <canvas id="gameMap" width="800" height="600"></canvas>
+                <div class="map-info">
+                    <div id="hoveredTileInfo" class="tile-info">
+                        Bewege die Maus über die Karte
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Sidebar -->
+            <aside class="right-sidebar">
+                <div class="minimap-panel">
+                    <h3>Minikarte</h3>
+                    <canvas id="minimap" width="200" height="200"></canvas>
+                </div>
+
+                <div class="building-panel">
+                    <h3>Gebäude</h3>
+                    <div id="selectedBuildingInfo" class="building-info">
+                        <p>Wähle ein Gebäude aus</p>
+                    </div>
+                </div>
+
+                <div class="units-panel">
+                    <h3>Verfügbare Einheiten</h3>
+                    <div id="availableUnits" class="units-grid">
+                        <!-- Available units will be populated here -->
+                    </div>
+                </div>
+            </aside>
+        </main>
+
+        <!-- Unit Purchase Modal -->
+        <div id="unitPurchaseModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Einheit kaufen</h3>
+                    <span class="close">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <div class="unit-purchase">
+                        <div id="purchaseUnitInfo" class="unit-details">
+                            <!-- Unit details will be shown here -->
+                        </div>
+                        <div class="purchase-actions">
+                            <button id="confirmPurchaseBtn" class="btn btn-success">Kaufen</button>
+                            <button id="cancelPurchaseBtn" class="btn btn-secondary">Abbrechen</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Battle Result Modal -->
+        <div id="battleResultModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Kampfergebnis</h3>
+                </div>
+                <div class="modal-body">
+                    <div id="battleResult" class="battle-result">
+                        <!-- Battle result will be shown here -->
+                    </div>
+                    <div class="battle-actions">
+                        <button id="closeBattleBtn" class="btn btn-primary">Weiter</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Game Over Modal -->
+        <div id="gameOverModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Spiel beendet</h3>
+                </div>
+                <div class="modal-body">
+                    <div id="gameOverResult" class="game-over-result">
+                        <!-- Game over result will be shown here -->
+                    </div>
+                    <div class="game-over-actions">
+                        <button id="backToLobbyBtn" class="btn btn-primary">Zurück zur Lobby</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Notifications -->
+        <div id="gameNotifications" class="notifications"></div>
+    </div>
+
+    <!-- Loading Screen -->
+    <div id="loadingScreen" class="loading-screen">
+        <div class="loading-content">
+            <div class="spinner"></div>
+            <h2>Spiel wird geladen...</h2>
+            <p id="loadingStatus">Verbinde mit Server...</p>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/game.js"></script>
+</body>
+</html>

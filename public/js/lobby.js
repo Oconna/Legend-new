@@ -72,7 +72,7 @@ class LobbyManager {
             } else {
                 showNotification('Du hast das Spiel verlassen', 'info');
             }
-            this.leaveLobby();
+            this.resetLobbyState();
         });
 
         this.socket.on('lobby_players_updated', (players) => {
@@ -115,7 +115,135 @@ class LobbyManager {
         // Create game button
         const createGameBtn = document.getElementById('createGameBtn');
         if (createGameBtn) {
-            createGame() {
+            createGameBtn.addEventListener('click', () => {
+                this.createGame();
+            });
+        }
+
+        // Refresh games button
+        const refreshGamesBtn = document.getElementById('refreshGamesBtn');
+        if (refreshGamesBtn) {
+            refreshGamesBtn.addEventListener('click', () => {
+                this.loadAvailableGames();
+            });
+        }
+
+        // Lobby modal buttons
+        const readyBtn = document.getElementById('readyBtn');
+        if (readyBtn) {
+            readyBtn.addEventListener('click', () => {
+                this.toggleReady();
+            });
+        }
+
+        const startGameBtn = document.getElementById('startGameBtn');
+        if (startGameBtn) {
+            startGameBtn.addEventListener('click', () => {
+                this.startGame();
+            });
+        }
+
+        const leaveLobbyBtn = document.getElementById('leaveLobbyBtn');
+        if (leaveLobbyBtn) {
+            leaveLobbyBtn.addEventListener('click', () => {
+                this.leaveLobby();
+            });
+        }
+
+        // Enter key submit
+        document.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                const activeElement = document.activeElement;
+                if (activeElement && (activeElement.id === 'playerName' || activeElement.id === 'gameName')) {
+                    this.createGame();
+                }
+            }
+        });
+    }
+
+    loadPlayerName() {
+        const savedName = loadFromLocalStorage('playerName', '');
+        if (savedName) {
+            const playerNameInput = document.getElementById('playerName');
+            if (playerNameInput) {
+                playerNameInput.value = savedName;
+                this.playerName = savedName;
+            }
+        }
+    }
+
+    savePlayerName() {
+        saveToLocalStorage('playerName', this.playerName);
+    }
+
+    async loadAvailableGames() {
+        try {
+            const response = await fetch('/api/games');
+            const games = await response.json();
+            this.updateGamesList(games);
+        } catch (error) {
+            console.error('Error loading games:', error);
+            showNotification('Fehler beim Laden der Spiele', 'error');
+        }
+    }
+
+    async loadRaces() {
+        try {
+            const response = await fetch('/api/races');
+            this.availableRaces = await response.json();
+        } catch (error) {
+            console.error('Error loading races:', error);
+            showNotification('Fehler beim Laden der Rassen', 'error');
+        }
+    }
+
+    updateGamesList(games) {
+        const gamesList = document.getElementById('gamesList');
+        if (!gamesList) return;
+        
+        if (games.length === 0) {
+            gamesList.innerHTML = '<div class="loading">Keine Spiele verfügbar</div>';
+            return;
+        }
+
+        gamesList.innerHTML = games.map(game => `
+            <div class="game-item" data-game-id="${game.id}" data-game-name="${game.name}" 
+                 data-max-players="${game.max_players}" data-map-size="${game.map_size}">
+                <h4>${game.name}</h4>
+                <div class="game-details">
+                    <span>Spieler: ${game.current_players}/${game.max_players}</span>
+                    <span>Karte: ${game.map_size}x${game.map_size}</span>
+                    <span>Status: ${this.getStatusText(game.status)}</span>
+                </div>
+                <div class="players-list">
+                    <strong>Spieler:</strong> ${game.players && game.players.length > 0 ? game.players.join(', ') : 'Keine'}
+                </div>
+            </div>
+        `).join('');
+
+        // Add click listeners to game items
+        gamesList.querySelectorAll('.game-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const gameId = parseInt(item.dataset.gameId);
+                const gameName = item.dataset.gameName;
+                const maxPlayers = parseInt(item.dataset.maxPlayers);
+                const mapSize = parseInt(item.dataset.mapSize);
+                
+                this.joinGame(gameId, gameName, maxPlayers, mapSize);
+            });
+        });
+    }
+
+    getStatusText(status) {
+        switch(status) {
+            case 'waiting': return 'Wartet auf Spieler';
+            case 'race_selection': return 'Rassenwahl';
+            case 'playing': return 'Spiel läuft';
+            default: return status;
+        }
+    }
+
+    createGame() {
         // Validate input
         const nameValidation = validatePlayerName(this.playerName);
         if (!nameValidation.valid) {
@@ -425,132 +553,4 @@ class LobbyManager {
 // Initialize lobby when page loads
 document.addEventListener('DOMContentLoaded', () => {
     window.lobbyManager = new LobbyManager();
-});GameBtn.addEventListener('click', () => {
-                this.createGame();
-            });
-        }
-
-        // Refresh games button
-        const refreshGamesBtn = document.getElementById('refreshGamesBtn');
-        if (refreshGamesBtn) {
-            refreshGamesBtn.addEventListener('click', () => {
-                this.loadAvailableGames();
-            });
-        }
-
-        // Lobby modal buttons
-        const readyBtn = document.getElementById('readyBtn');
-        if (readyBtn) {
-            readyBtn.addEventListener('click', () => {
-                this.toggleReady();
-            });
-        }
-
-        const startGameBtn = document.getElementById('startGameBtn');
-        if (startGameBtn) {
-            startGameBtn.addEventListener('click', () => {
-                this.startGame();
-            });
-        }
-
-        const leaveLobbyBtn = document.getElementById('leaveLobbyBtn');
-        if (leaveLobbyBtn) {
-            leaveLobbyBtn.addEventListener('click', () => {
-                this.leaveLobby();
-            });
-        }
-
-        // Enter key submit
-        document.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                const activeElement = document.activeElement;
-                if (activeElement && (activeElement.id === 'playerName' || activeElement.id === 'gameName')) {
-                    this.createGame();
-                }
-            }
-        });
-    }
-
-    loadPlayerName() {
-        const savedName = loadFromLocalStorage('playerName', '');
-        if (savedName) {
-            const playerNameInput = document.getElementById('playerName');
-            if (playerNameInput) {
-                playerNameInput.value = savedName;
-                this.playerName = savedName;
-            }
-        }
-    }
-
-    savePlayerName() {
-        saveToLocalStorage('playerName', this.playerName);
-    }
-
-    async loadAvailableGames() {
-        try {
-            const response = await fetch('/api/games');
-            const games = await response.json();
-            this.updateGamesList(games);
-        } catch (error) {
-            console.error('Error loading games:', error);
-            showNotification('Fehler beim Laden der Spiele', 'error');
-        }
-    }
-
-    async loadRaces() {
-        try {
-            const response = await fetch('/api/races');
-            this.availableRaces = await response.json();
-        } catch (error) {
-            console.error('Error loading races:', error);
-            showNotification('Fehler beim Laden der Rassen', 'error');
-        }
-    }
-
-    updateGamesList(games) {
-        const gamesList = document.getElementById('gamesList');
-        if (!gamesList) return;
-        
-        if (games.length === 0) {
-            gamesList.innerHTML = '<div class="loading">Keine Spiele verfügbar</div>';
-            return;
-        }
-
-        gamesList.innerHTML = games.map(game => `
-            <div class="game-item" data-game-id="${game.id}" data-game-name="${game.name}" 
-                 data-max-players="${game.max_players}" data-map-size="${game.map_size}">
-                <h4>${game.name}</h4>
-                <div class="game-details">
-                    <span>Spieler: ${game.current_players}/${game.max_players}</span>
-                    <span>Karte: ${game.map_size}x${game.map_size}</span>
-                    <span>Status: ${this.getStatusText(game.status)}</span>
-                </div>
-                <div class="players-list">
-                    <strong>Spieler:</strong> ${game.players && game.players.length > 0 ? game.players.join(', ') : 'Keine'}
-                </div>
-            </div>
-        `).join('');
-
-        // Add click listeners to game items
-        gamesList.querySelectorAll('.game-item').forEach(item => {
-            item.addEventListener('click', () => {
-                const gameId = parseInt(item.dataset.gameId);
-                const gameName = item.dataset.gameName;
-                const maxPlayers = parseInt(item.dataset.maxPlayers);
-                const mapSize = parseInt(item.dataset.mapSize);
-                
-                this.joinGame(gameId, gameName, maxPlayers, mapSize);
-            });
-        });
-    }
-
-    getStatusText(status) {
-        switch(status) {
-            case 'waiting': return 'Wartet auf Spieler';
-            case 'race_selection': return 'Rassenwahl';
-            case 'playing': return 'Spiel läuft';
-            default: return status;
-        }
-    }
-
-    create
+});

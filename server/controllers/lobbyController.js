@@ -2,11 +2,17 @@ const db = require('../config/database');
 
 class LobbyController {
     
-    async createGame(gameName, maxPlayers, mapSize, playerName) {
+    async createGame(gameName, maxPlayers, mapSize, playerName, socketId) {
         try {
+            console.log('Creating game with params:', { gameName, maxPlayers, mapSize, playerName, socketId });
+
             // Validierung
             if (!gameName || gameName.trim().length === 0) {
                 return { success: false, message: 'Spielname erforderlich' };
+            }
+            
+            if (!playerName || playerName.trim().length === 0) {
+                return { success: false, message: 'Spielername erforderlich' };
             }
             
             if (maxPlayers < 2 || maxPlayers > 8) {
@@ -29,43 +35,49 @@ class LobbyController {
 
             // Erstelle neues Spiel
             const result = await db.query(
-                'INSERT INTO games (name, max_players, map_size, status) VALUES (?, ?, ?, ?)',
-                [gameName.trim(), maxPlayers, mapSize, 'waiting']
+                'INSERT INTO games (name, max_players, map_size, status, current_players) VALUES (?, ?, ?, ?, ?)',
+                [gameName.trim(), maxPlayers, mapSize, 'waiting', 1]
             );
 
             const gameId = result.insertId;
+            console.log('Game created with ID:', gameId);
 
-            // Füge ersten Spieler hinzu
+            // Füge ersten Spieler hinzu (Host)
             await db.query(
-                'INSERT INTO game_players (game_id, player_name) VALUES (?, ?)',
-                [gameId, playerName.trim()]
+                'INSERT INTO game_players (game_id, player_name, socket_id, is_host, is_ready) VALUES (?, ?, ?, ?, ?)',
+                [gameId, playerName.trim(), socketId, true, false]
             );
 
-            // Update current_players count
-            await db.query(
-                'UPDATE games SET current_players = 1 WHERE id = ?',
-                [gameId]
-            );
+            console.log('Host player added to game');
 
             return {
                 success: true,
                 gameId: gameId,
+                gameName: gameName.trim(),
                 message: 'Spiel erfolgreich erstellt',
                 currentPlayers: 1,
-                maxPlayers: maxPlayers
+                maxPlayers: maxPlayers,
+                mapSize: mapSize,
+                isHost: true
             };
 
         } catch (error) {
             console.error('Error creating game:', error);
-            return { success: false, message: 'Fehler beim Erstellen des Spiels' };
+            return { success: false, message: 'Fehler beim Erstellen des Spiels: ' + error.message };
         }
     }
 
     async joinGame(gameId, playerName, socketId) {
         try {
+            console.log('Joining game with params:', { gameId, playerName, socketId });
+
             // Validierung
             if (!playerName || playerName.trim().length === 0) {
                 return { success: false, message: 'Spielername erforderlich' };
+            }
+
+            if (!gameId || isNaN(gameId)) {
+                return { success: false, message: 'Ungültige Spiel-ID' };
             }
 
             // Prüfe ob Spiel existiert und noch Platz hat
@@ -79,25 +91,48 @@ class LobbyController {
             }
 
             const gameData = game[0];
+            console.log('Found game:', gameData);
 
-            if (gameData.current_players >= gameData.max_players) {
-                return { success: false, message: 'Spiel ist bereits voll' };
-            }
-
-            // Prüfe ob Spielername bereits in diesem Spiel existiert
+            // Prüfe ob Spielername bereits in diesem Spiel existiert (aktive Spieler)
             const existingPlayer = await db.query(
-                'SELECT id FROM game_players WHERE game_id = ? AND player_name = ?',
+                'SELECT id, is_active FROM game_players WHERE game_id = ? AND player_name = ?',
                 [gameId, playerName.trim()]
             );
 
             if (existingPlayer.length > 0) {
-                return { success: false, message: 'Spielername bereits in diesem Spiel vergeben' };
+                // Wenn Spieler existiert aber inaktiv ist, reaktiviere ihn
+                if (!existingPlayer[0].is_active) {
+                    await db.query(
+                        'UPDATE game_players SET is_active = true, socket_id = ? WHERE id = ?',
+                        [socketId, existingPlayer[0].id]
+                    );
+                    
+                    console.log('Reactivated existing player');
+                    
+                    return {
+                        success: true,
+                        gameId: gameId,
+                        gameName: gameData.name,
+                        message: 'Erfolgreich wieder dem Spiel beigetreten',
+                        currentPlayers: gameData.current_players,
+                        maxPlayers: gameData.max_players,
+                        mapSize: gameData.map_size,
+                        isHost: false
+                    };
+                } else {
+                    return { success: false, message: 'Spielername bereits in diesem Spiel vergeben' };
+                }
             }
 
-            // Füge Spieler hinzu
+            // Prüfe ob noch Platz ist
+            if (gameData.current_players >= gameData.max_players) {
+                return { success: false, message: 'Spiel ist bereits voll' };
+            }
+
+            // Füge neuen Spieler hinzu
             await db.query(
-                'INSERT INTO game_players (game_id, player_name, socket_id) VALUES (?, ?, ?)',
-                [gameId, playerName.trim(), socketId]
+                'INSERT INTO game_players (game_id, player_name, socket_id, is_host, is_ready) VALUES (?, ?, ?, ?, ?)',
+                [gameId, playerName.trim(), socketId, false, false]
             );
 
             // Update current_players count
@@ -107,17 +142,22 @@ class LobbyController {
                 [newPlayerCount, gameId]
             );
 
+            console.log('Player added to game, new count:', newPlayerCount);
+
             return {
                 success: true,
                 gameId: gameId,
+                gameName: gameData.name,
                 message: 'Spiel erfolgreich beigetreten',
                 currentPlayers: newPlayerCount,
-                maxPlayers: gameData.max_players
+                maxPlayers: gameData.max_players,
+                mapSize: gameData.map_size,
+                isHost: false
             };
 
         } catch (error) {
             console.error('Error joining game:', error);
-            return { success: false, message: 'Fehler beim Beitreten des Spiels' };
+            return { success: false, message: 'Fehler beim Beitreten des Spiels: ' + error.message };
         }
     }
 
@@ -137,17 +177,11 @@ class LobbyController {
 
             const allReady = players[0].total > 1 && players[0].ready_count === players[0].total;
 
-            if (allReady) {
-                // Update game status to race selection
-                await db.query(
-                    'UPDATE games SET status = "race_selection" WHERE id = ?',
-                    [gameId]
-                );
-            }
-
             return {
                 success: true,
-                allReady: allReady
+                allReady: allReady,
+                readyCount: players[0].ready_count,
+                totalPlayers: players[0].total
             };
 
         } catch (error) {
@@ -156,33 +190,46 @@ class LobbyController {
         }
     }
 
-    async getAvailableGames() {
+    async startGame(gameId, playerName) {
         try {
-            const games = await db.query(`
-                SELECT 
-                    g.id,
-                    g.name,
-                    g.max_players,
-                    g.current_players,
-                    g.map_size,
-                    g.status,
-                    g.created_at,
-                    GROUP_CONCAT(gp.player_name ORDER BY gp.joined_at) as players
-                FROM games g
-                LEFT JOIN game_players gp ON g.id = gp.game_id AND gp.is_active = true
-                WHERE g.status IN ('waiting', 'race_selection')
-                GROUP BY g.id, g.name, g.max_players, g.current_players, g.map_size, g.status, g.created_at
-                ORDER BY g.created_at DESC
-            `);
+            // Prüfe ob Spieler der Host ist
+            const host = await db.query(
+                'SELECT id FROM game_players WHERE game_id = ? AND player_name = ? AND is_host = true',
+                [gameId, playerName]
+            );
 
-            return games.map(game => ({
-                ...game,
-                players: game.players ? game.players.split(',') : []
-            }));
+            if (host.length === 0) {
+                return { success: false, message: 'Nur der Host kann das Spiel starten' };
+            }
+
+            // Prüfe ob alle Spieler bereit sind
+            const players = await db.query(
+                'SELECT COUNT(*) as total, SUM(is_ready) as ready_count FROM game_players WHERE game_id = ? AND is_active = true',
+                [gameId]
+            );
+
+            if (players[0].total < 2) {
+                return { success: false, message: 'Mindestens 2 Spieler erforderlich' };
+            }
+
+            if (players[0].ready_count !== players[0].total) {
+                return { success: false, message: 'Nicht alle Spieler sind bereit' };
+            }
+
+            // Update game status to race selection
+            await db.query(
+                'UPDATE games SET status = "race_selection" WHERE id = ?',
+                [gameId]
+            );
+
+            return {
+                success: true,
+                message: 'Spiel wird gestartet...'
+            };
 
         } catch (error) {
-            console.error('Error getting available games:', error);
-            return [];
+            console.error('Error starting game:', error);
+            return { success: false, message: 'Fehler beim Starten des Spiels' };
         }
     }
 
@@ -252,6 +299,56 @@ class LobbyController {
         } catch (error) {
             console.error('Error leaving game:', error);
             return { success: false, message: 'Fehler beim Verlassen des Spiels' };
+        }
+    }
+
+    async getAvailableGames() {
+        try {
+            const games = await db.query(`
+                SELECT 
+                    g.id,
+                    g.name,
+                    g.max_players,
+                    g.current_players,
+                    g.map_size,
+                    g.status,
+                    g.created_at,
+                    GROUP_CONCAT(gp.player_name ORDER BY gp.joined_at) as players
+                FROM games g
+                LEFT JOIN game_players gp ON g.id = gp.game_id AND gp.is_active = true
+                WHERE g.status IN ('waiting', 'race_selection')
+                GROUP BY g.id, g.name, g.max_players, g.current_players, g.map_size, g.status, g.created_at
+                ORDER BY g.created_at DESC
+            `);
+
+            return games.map(game => ({
+                ...game,
+                players: game.players ? game.players.split(',') : []
+            }));
+
+        } catch (error) {
+            console.error('Error getting available games:', error);
+            return [];
+        }
+    }
+
+    async getGamePlayers(gameId) {
+        try {
+            const players = await db.query(`
+                SELECT 
+                    gp.*,
+                    r.name as race_name,
+                    r.color_hex as race_color
+                FROM game_players gp
+                LEFT JOIN races r ON gp.race_id = r.id
+                WHERE gp.game_id = ? AND gp.is_active = true
+                ORDER BY gp.joined_at
+            `, [gameId]);
+
+            return players;
+        } catch (error) {
+            console.error('Error getting game players:', error);
+            return [];
         }
     }
 }

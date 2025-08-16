@@ -37,12 +37,38 @@ app.get('/game/:gameId', (req, res) => {
 });
 
 // API Routes
+app.get('/api/test', async (req, res) => {
+    try {
+        // Test database connection
+        const testResult = await db.query('SELECT 1 as test');
+        
+        // Test races table
+        const races = await db.query('SELECT COUNT(*) as count FROM races');
+        
+        res.json({
+            status: 'OK',
+            database: 'Connected',
+            testQuery: testResult,
+            racesCount: races[0].count,
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        console.error('API Test Error:', error);
+        res.status(500).json({
+            status: 'ERROR',
+            error: error.message,
+            stack: error.stack
+        });
+    }
+});
+
 app.get('/api/games', async (req, res) => {
     try {
         const games = await lobbyController.getAvailableGames();
         res.json(games);
     } catch (error) {
-        res.status(500).json({ error: 'Fehler beim Laden der Spiele' });
+        console.error('Error in /api/games:', error);
+        res.status(500).json({ error: 'Fehler beim Laden der Spiele: ' + error.message });
     }
 });
 
@@ -51,7 +77,8 @@ app.get('/api/races', async (req, res) => {
         const races = await db.query('SELECT * FROM races ORDER BY name');
         res.json(races);
     } catch (error) {
-        res.status(500).json({ error: 'Fehler beim Laden der Rassen' });
+        console.error('Error in /api/races:', error);
+        res.status(500).json({ error: 'Fehler beim Laden der Rassen: ' + error.message });
     }
 });
 
@@ -62,7 +89,10 @@ io.on('connection', (socket) => {
     // Lobby Events
     socket.on('create_game', async (data) => {
         try {
+            console.log('Create game request:', data);
             const result = await lobbyController.createGame(data.gameName, data.maxPlayers, data.mapSize, data.playerName, socket.id);
+            console.log('Create game result:', result);
+            
             if (result.success) {
                 socket.join(result.gameId);
                 socket.emit('game_created', result);
@@ -73,16 +103,21 @@ io.on('connection', (socket) => {
                 
                 io.emit('games_updated', await lobbyController.getAvailableGames());
             } else {
+                console.error('Game creation failed:', result.message);
                 socket.emit('error', result.message);
             }
         } catch (error) {
-            socket.emit('error', 'Fehler beim Erstellen des Spiels');
+            console.error('Error in create_game:', error);
+            socket.emit('error', 'Fehler beim Erstellen des Spiels: ' + error.message);
         }
     });
 
     socket.on('join_game', async (data) => {
         try {
+            console.log('Join game request:', data);
             const result = await lobbyController.joinGame(data.gameId, data.playerName, socket.id);
+            console.log('Join game result:', result);
+            
             if (result.success) {
                 socket.join(data.gameId);
                 socket.emit('game_joined', result);
@@ -99,10 +134,12 @@ io.on('connection', (socket) => {
                 
                 io.emit('games_updated', await lobbyController.getAvailableGames());
             } else {
+                console.error('Game join failed:', result.message);
                 socket.emit('error', result.message);
             }
         } catch (error) {
-            socket.emit('error', 'Fehler beim Beitreten des Spiels');
+            console.error('Error in join_game:', error);
+            socket.emit('error', 'Fehler beim Beitreten des Spiels: ' + error.message);
         }
     });
 

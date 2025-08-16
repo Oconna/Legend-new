@@ -144,6 +144,38 @@ io.on('connection', (socket) => {
         }
     });
 
+    socket.on('leave_game', async (data) => {
+        try {
+            const result = await lobbyController.leaveGame(data.gameId, data.playerName);
+            if (result.success) {
+                socket.leave(data.gameId);
+                socket.emit('game_left', result);
+                
+                if (result.gameDeleted) {
+                    // Benachrichtige alle über gelöschtes Spiel
+                    io.emit('games_updated', await lobbyController.getAvailableGames());
+                } else {
+                    // Benachrichtige andere Spieler in der Lobby
+                    socket.to(data.gameId).emit('player_left', {
+                        playerName: data.playerName,
+                        remainingPlayers: result.remainingPlayers
+                    });
+                    
+                    // Send updated player list to remaining players
+                    const players = await lobbyController.getGamePlayers(data.gameId);
+                    io.to(data.gameId).emit('lobby_players_updated', players);
+                    
+                    // Update games list
+                    io.emit('games_updated', await lobbyController.getAvailableGames());
+                }
+            } else {
+                socket.emit('error', result.message);
+            }
+        } catch (error) {
+            socket.emit('error', 'Fehler beim Verlassen des Spiels');
+        }
+    });
+
     // Game Events
     socket.on('select_race', async (data) => {
         try {
@@ -183,9 +215,39 @@ io.on('connection', (socket) => {
     });
 
     // Disconnect
-    socket.on('disconnect', () => {
+    socket.on('disconnect', async () => {
         console.log(`Spieler getrennt: ${socket.id}`);
-        // TODO: Handle player disconnect (remove from games, etc.)
+        
+        // Finde Spieler anhand der Socket-ID und entferne ihn aus allen Spielen
+        try {
+            const playerGames = await db.query(
+                'SELECT game_id, player_name FROM game_players WHERE socket_id = ? AND is_active = true',
+                [socket.id]
+            );
+
+            for (const playerGame of playerGames) {
+                const result = await lobbyController.leaveGame(playerGame.game_id, playerGame.player_name);
+                if (result.success) {
+                    if (result.gameDeleted) {
+                        io.emit('games_updated', await lobbyController.getAvailableGames());
+                    } else {
+                        // Benachrichtige andere Spieler
+                        socket.to(playerGame.game_id).emit('player_left', {
+                            playerName: playerGame.player_name,
+                            remainingPlayers: result.remainingPlayers
+                        });
+                        
+                        // Send updated player list
+                        const players = await lobbyController.getGamePlayers(playerGame.game_id);
+                        io.to(playerGame.game_id).emit('lobby_players_updated', players);
+                        
+                        io.emit('games_updated', await lobbyController.getAvailableGames());
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Error handling disconnect:', error);
+        }
     });
 });
 

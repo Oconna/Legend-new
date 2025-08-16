@@ -2,7 +2,7 @@ const db = require('../config/database');
 
 class LobbyController {
     
-    async createGame(gameName, maxPlayers, mapSize, playerName, socketId) {
+    async createGame(gameName, maxPlayers, mapSize, playerName) {
         try {
             // Validierung
             if (!gameName || gameName.trim().length === 0) {
@@ -35,10 +35,10 @@ class LobbyController {
 
             const gameId = result.insertId;
 
-            // Füge ersten Spieler hinzu (Host)
+            // Füge ersten Spieler hinzu
             await db.query(
-                'INSERT INTO game_players (game_id, player_name, socket_id, is_host) VALUES (?, ?, ?, ?)',
-                [gameId, playerName.trim(), socketId, true]
+                'INSERT INTO game_players (game_id, player_name) VALUES (?, ?)',
+                [gameId, playerName.trim()]
             );
 
             // Update current_players count
@@ -50,12 +50,9 @@ class LobbyController {
             return {
                 success: true,
                 gameId: gameId,
-                gameName: gameName.trim(),
                 message: 'Spiel erfolgreich erstellt',
                 currentPlayers: 1,
-                maxPlayers: maxPlayers,
-                mapSize: mapSize,
-                isHost: true
+                maxPlayers: maxPlayers
             };
 
         } catch (error) {
@@ -113,12 +110,9 @@ class LobbyController {
             return {
                 success: true,
                 gameId: gameId,
-                gameName: gameData.name,
                 message: 'Spiel erfolgreich beigetreten',
                 currentPlayers: newPlayerCount,
-                maxPlayers: gameData.max_players,
-                mapSize: gameData.map_size,
-                isHost: false
+                maxPlayers: gameData.max_players
             };
 
         } catch (error) {
@@ -143,59 +137,22 @@ class LobbyController {
 
             const allReady = players[0].total > 1 && players[0].ready_count === players[0].total;
 
+            if (allReady) {
+                // Update game status to race selection
+                await db.query(
+                    'UPDATE games SET status = "race_selection" WHERE id = ?',
+                    [gameId]
+                );
+            }
+
             return {
                 success: true,
-                allReady: allReady,
-                readyCount: players[0].ready_count,
-                totalPlayers: players[0].total
+                allReady: allReady
             };
 
         } catch (error) {
             console.error('Error setting player ready:', error);
             return { success: false, message: 'Fehler bei der Bereitschaftsanzeige' };
-        }
-    }
-
-    async startGame(gameId, playerName) {
-        try {
-            // Prüfe ob Spieler der Host ist
-            const host = await db.query(
-                'SELECT id FROM game_players WHERE game_id = ? AND player_name = ? AND is_host = true',
-                [gameId, playerName]
-            );
-
-            if (host.length === 0) {
-                return { success: false, message: 'Nur der Host kann das Spiel starten' };
-            }
-
-            // Prüfe ob alle Spieler bereit sind
-            const players = await db.query(
-                'SELECT COUNT(*) as total, SUM(is_ready) as ready_count FROM game_players WHERE game_id = ? AND is_active = true',
-                [gameId]
-            );
-
-            if (players[0].total < 2) {
-                return { success: false, message: 'Mindestens 2 Spieler erforderlich' };
-            }
-
-            if (players[0].ready_count !== players[0].total) {
-                return { success: false, message: 'Nicht alle Spieler sind bereit' };
-            }
-
-            // Update game status to race selection
-            await db.query(
-                'UPDATE games SET status = "race_selection" WHERE id = ?',
-                [gameId]
-            );
-
-            return {
-                success: true,
-                message: 'Spiel wird gestartet...'
-            };
-
-        } catch (error) {
-            console.error('Error starting game:', error);
-            return { success: false, message: 'Fehler beim Starten des Spiels' };
         }
     }
 
@@ -229,23 +186,72 @@ class LobbyController {
         }
     }
 
-    async getGamePlayers(gameId) {
+    async leaveGame(gameId, playerName) {
         try {
-            const players = await db.query(`
-                SELECT 
-                    gp.*,
-                    r.name as race_name,
-                    r.color_hex as race_color
-                FROM game_players gp
-                LEFT JOIN races r ON gp.race_id = r.id
-                WHERE gp.game_id = ? AND gp.is_active = true
-                ORDER BY gp.joined_at
-            `, [gameId]);
+            // Entferne Spieler aus dem Spiel
+            await db.query(
+                'UPDATE game_players SET is_active = false WHERE game_id = ? AND player_name = ?',
+                [gameId, playerName]
+            );
 
-            return players;
+            // Zähle aktive Spieler
+            const activePlayers = await db.query(
+                'SELECT COUNT(*) as count FROM game_players WHERE game_id = ? AND is_active = true',
+                [gameId]
+            );
+
+            const activePlayerCount = activePlayers[0].count;
+
+            // Update current_players count
+            await db.query(
+                'UPDATE games SET current_players = ? WHERE id = ?',
+                [activePlayerCount, gameId]
+            );
+
+            // Wenn keine aktiven Spieler mehr vorhanden sind, lösche das Spiel
+            if (activePlayerCount === 0) {
+                await db.query('DELETE FROM games WHERE id = ?', [gameId]);
+                console.log(`Spiel ${gameId} wurde gelöscht (keine Spieler mehr)`);
+                
+                return {
+                    success: true,
+                    gameDeleted: true,
+                    message: 'Spiel verlassen und gelöscht'
+                };
+            } else {
+                // Prüfe ob der Host das Spiel verlassen hat
+                const hostExists = await db.query(
+                    'SELECT id FROM game_players WHERE game_id = ? AND is_host = true AND is_active = true',
+                    [gameId]
+                );
+
+                // Wenn kein Host mehr vorhanden ist, mache den ältesten aktiven Spieler zum Host
+                if (hostExists.length === 0) {
+                    const oldestPlayer = await db.query(
+                        'SELECT id FROM game_players WHERE game_id = ? AND is_active = true ORDER BY joined_at ASC LIMIT 1',
+                        [gameId]
+                    );
+
+                    if (oldestPlayer.length > 0) {
+                        await db.query(
+                            'UPDATE game_players SET is_host = true WHERE id = ?',
+                            [oldestPlayer[0].id]
+                        );
+                        console.log(`Neuer Host für Spiel ${gameId} bestimmt`);
+                    }
+                }
+
+                return {
+                    success: true,
+                    gameDeleted: false,
+                    message: 'Spiel verlassen',
+                    remainingPlayers: activePlayerCount
+                };
+            }
+
         } catch (error) {
-            console.error('Error getting game players:', error);
-            return [];
+            console.error('Error leaving game:', error);
+            return { success: false, message: 'Fehler beim Verlassen des Spiels' };
         }
     }
 }

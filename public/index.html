@@ -75,31 +75,74 @@
             <!-- Current Game Lobby Section (shown when in a game) -->
             <section id="currentGameSection" class="current-game-section" style="display: none;">
                 <h2>Aktuelle Spiellobby</h2>
-                <div class="current-game-info">
-                    <div class="game-header">
-                        <h3 id="currentGameName">Spielname</h3>
-                        <div class="game-meta">
-                            <span>Spieler: <span id="currentGamePlayerCount">0</span>/<span id="currentGameMaxPlayers">0</span></span>
-                            <span>Karte: <span id="currentGameMapSize">0</span>x<span id="currentGameMapSizeY">0</span></span>
+                <div class="current-game-container">
+                    <!-- Left side: Game info and controls -->
+                    <div class="game-lobby-left">
+                        <div class="current-game-info">
+                            <div class="game-header">
+                                <h3 id="currentGameName">Spielname</h3>
+                                <div class="game-meta">
+                                    <span>Spieler: <span id="currentGamePlayerCount">0</span>/<span id="currentGameMaxPlayers">0</span></span>
+                                    <span>Karte: <span id="currentGameMapSize">0</span>x<span id="currentGameMapSizeY">0</span></span>
+                                </div>
+                            </div>
+                            
+                            <div class="players-lobby">
+                                <h4>Spieler in der Lobby:</h4>
+                                <ul id="currentGamePlayersList" class="players-lobby-list">
+                                    <!-- Players will be populated here -->
+                                </ul>
+                            </div>
+                            
+                            <div class="lobby-controls">
+                                <button id="readyBtn" class="btn btn-success">Bereit</button>
+                                <button id="startGameBtn" class="btn btn-primary" style="display: none;">Spiel starten</button>
+                                <button id="leaveLobbyBtn" class="btn btn-danger">Lobby verlassen</button>
+                            </div>
+                            
+                            <div class="lobby-status">
+                                <p id="lobbyStatusText">Warte auf andere Spieler...</p>
+                                <p id="readyStatusText">Bereit: <span id="readyCount">0</span>/<span id="totalPlayers">0</span></p>
+                            </div>
                         </div>
                     </div>
-                    
-                    <div class="players-lobby">
-                        <h4>Spieler in der Lobby:</h4>
-                        <ul id="currentGamePlayersList" class="players-lobby-list">
-                            <!-- Players will be populated here -->
-                        </ul>
-                    </div>
-                    
-                    <div class="lobby-controls">
-                        <button id="readyBtn" class="btn btn-success">Bereit</button>
-                        <button id="startGameBtn" class="btn btn-primary" style="display: none;">Spiel starten</button>
-                        <button id="leaveLobbyBtn" class="btn btn-danger">Lobby verlassen</button>
-                    </div>
-                    
-                    <div class="lobby-status">
-                        <p id="lobbyStatusText">Warte auf andere Spieler...</p>
-                        <p id="readyStatusText">Bereit: <span id="readyCount">0</span>/<span id="totalPlayers">0</span></p>
+
+                    <!-- Right side: Chat -->
+                    <div class="game-lobby-right">
+                        <div id="lobbyChat" class="lobby-chat" style="display: none;">
+                            <div class="chat-header">
+                                <h4>💬 Lobby Chat</h4>
+                                <span class="chat-info">
+                                    <span id="lobbyChatPlayerCount">0</span> Spieler online
+                                </span>
+                            </div>
+                            <div class="chat-messages-container">
+                                <div id="lobbyChatMessages" class="chat-messages">
+                                    <!-- Chat messages will be displayed here -->
+                                </div>
+                            </div>
+                            <div class="chat-input-container">
+                                <div class="chat-input-wrapper">
+                                    <textarea 
+                                        id="lobbyChatMessageInput" 
+                                        class="chat-input" 
+                                        placeholder="Schreibe eine Nachricht..."
+                                        maxlength="500"
+                                        rows="1"></textarea>
+                                    <button id="lobbyChatSendButton" class="chat-send-btn" title="Nachricht senden">
+                                        📤
+                                    </button>
+                                </div>
+                                <div class="chat-controls">
+                                    <small class="char-count">
+                                        <span id="lobbyChatCharCount">0</span>/500
+                                    </small>
+                                    <small class="chat-hint">
+                                        Enter zum Senden
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </section>

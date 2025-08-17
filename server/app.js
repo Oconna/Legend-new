@@ -1116,6 +1116,401 @@ io.on('connection', (socket) => {
             console.error('Error handling disconnect:', error);
         }
     });
+	
+	// Zug beenden
+socket.on('end_turn', async (data) => {
+    try {
+        console.log('End turn request:', data);
+        
+        const result = await gameEngine.endTurn(data.gameId, data.playerId);
+        
+        if (result.success) {
+            // Benachrichtige alle Spieler über Zugwechsel
+            io.to(`db_game_${data.gameId}`).emit('turn_ended', {
+                nextPlayer: result.nextPlayer,
+                turnNumber: result.turnNumber,
+                isNewRound: result.isNewRound
+            });
+            
+            // Prüfe Spielende
+            const gameEndCheck = await gameEngine.checkGameEnd(data.gameId);
+            if (gameEndCheck.gameEnded) {
+                io.to(`db_game_${data.gameId}`).emit('game_ended', gameEndCheck);
+            } else if (gameEndCheck.eliminatedPlayers.length > 0) {
+                gameEndCheck.eliminatedPlayers.forEach(player => {
+                    io.to(`db_game_${data.gameId}`).emit('player_eliminated', {
+                        playerName: player.player_name
+                    });
+                });
+            }
+            
+        } else {
+            socket.emit('error', result.message);
+        }
+    } catch (error) {
+        console.error('Error in end_turn:', error);
+        socket.emit('error', 'Fehler beim Beenden des Zuges');
+    }
+});
+
+// Einheit bewegen
+socket.on('move_unit', async (data) => {
+    try {
+        console.log('Move unit request:', data);
+        
+        const result = await gameEngine.moveUnit(
+            data.gameId, 
+            data.playerId, 
+            data.unitId, 
+            data.targetX, 
+            data.targetY
+        );
+        
+        if (result.success) {
+            // Benachrichtige alle Spieler über die Bewegung
+            io.to(`db_game_${data.gameId}`).emit('unit_moved', {
+                unitId: result.unitId,
+                fromX: result.fromX,
+                fromY: result.fromY,
+                toX: result.toX,
+                toY: result.toY,
+                movementCost: result.movementCost,
+                remainingMovement: result.remainingMovement
+            });
+            
+            // Prüfe ob Gebäude erobert wurde
+            const captureResult = await gameEngine.captureBuilding(
+                data.gameId, 
+                data.playerId, 
+                data.targetX, 
+                data.targetY
+            );
+            
+            if (captureResult.success && captureResult.captured) {
+                io.to(`db_game_${data.gameId}`).emit('building_captured', {
+                    playerId: data.playerId,
+                    x: data.targetX,
+                    y: data.targetY,
+                    buildingType: captureResult.buildingType
+                });
+            }
+            
+        } else {
+            socket.emit('error', result.message);
+        }
+    } catch (error) {
+        console.error('Error in move_unit:', error);
+        socket.emit('error', 'Fehler bei der Bewegung');
+    }
+});
+
+// Angriff ausführen
+socket.on('attack_unit', async (data) => {
+    try {
+        console.log('Attack unit request:', data);
+        
+        const result = await gameEngine.attackUnit(
+            data.gameId,
+            data.playerId,
+            data.attackerUnitId,
+            data.targetX,
+            data.targetY
+        );
+        
+        if (result.success) {
+            // Benachrichtige alle Spieler über den Angriff
+            io.to(`db_game_${data.gameId}`).emit('unit_attacked', {
+                attacker: result.attacker,
+                defender: result.defender
+            });
+            
+            // Prüfe Spielende nach Kampf
+            const gameEndCheck = await gameEngine.checkGameEnd(data.gameId);
+            if (gameEndCheck.gameEnded) {
+                io.to(`db_game_${data.gameId}`).emit('game_ended', gameEndCheck);
+            } else if (gameEndCheck.eliminatedPlayers.length > 0) {
+                gameEndCheck.eliminatedPlayers.forEach(player => {
+                    io.to(`db_game_${data.gameId}`).emit('player_eliminated', {
+                        playerName: player.player_name
+                    });
+                });
+            }
+            
+        } else {
+            socket.emit('error', result.message);
+        }
+    } catch (error) {
+        console.error('Error in attack_unit:', error);
+        socket.emit('error', 'Fehler beim Angriff');
+    }
+});
+
+// Einheit kaufen
+socket.on('purchase_unit', async (data) => {
+    try {
+        console.log('Purchase unit request:', data);
+        
+        const result = await gameEngine.purchaseUnit(
+            data.gameId,
+            data.playerId,
+            data.unitTypeId,
+            data.buildingX,
+            data.buildingY
+        );
+        
+        if (result.success) {
+            // Benachrichtige alle Spieler über den Kauf
+            io.to(`db_game_${data.gameId}`).emit('unit_purchased', {
+                playerId: data.playerId,
+                unit: result.unit,
+                newGold: result.newGold
+            });
+        } else {
+            socket.emit('error', result.message);
+        }
+    } catch (error) {
+        console.error('Error in purchase_unit:', error);
+        socket.emit('error', 'Fehler beim Einheitenkauf');
+    }
+});
+
+// Spielzustand abrufen (bereits vorhanden, aber erweitert)
+socket.on('get_game_state', async (data) => {
+    try {
+        const result = await gameEngine.loadGameState(data.gameId);
+        
+        if (result.success) {
+            socket.emit('game_state', result.gameState);
+        } else {
+            socket.emit('error', result.message || 'Spielstatus nicht gefunden');
+        }
+    } catch (error) {
+        console.error('Error in get_game_state:', error);
+        socket.emit('error', 'Fehler beim Laden des Spielstatus: ' + error.message);
+    }
+});
+
+// Debug/Admin Events für Spielentwicklung
+socket.on('admin_force_game_end', async (data) => {
+    try {
+        if (!data.gameId) {
+            socket.emit('error', 'Game ID required');
+            return;
+        }
+        
+        console.log(`Admin forcing game end for game ${data.gameId}`);
+        
+        // Spiel als beendet markieren
+        await db.query('UPDATE games SET status = "finished", finished_at = NOW() WHERE id = ?', [data.gameId]);
+        
+        // Alle Spieler benachrichtigen
+        io.to(`db_game_${data.gameId}`).emit('game_ended', {
+            gameEnded: true,
+            winner: null,
+            adminForced: true
+        });
+        
+        socket.emit('admin_action_success', {
+            action: 'force_game_end',
+            gameId: data.gameId
+        });
+        
+    } catch (error) {
+        console.error('Error forcing game end:', error);
+        socket.emit('error', 'Fehler beim Beenden des Spiels');
+    }
+});
+
+socket.on('admin_get_game_engine_stats', async (data) => {
+    try {
+        if (!data.gameId) {
+            socket.emit('error', 'Game ID required');
+            return;
+        }
+        
+        const result = await gameEngine.loadGameState(data.gameId);
+        
+        if (result.success) {
+            const gameState = result.gameState;
+            const stats = {
+                gameId: data.gameId,
+                status: gameState.game.status,
+                turnNumber: gameState.game.turn_number,
+                currentPlayer: gameState.players.find(p => p.id === gameState.game.current_turn_player_id),
+                playerCount: gameState.players.length,
+                activePlayerCount: gameState.players.filter(p => p.is_active).length,
+                unitCount: gameState.units.length,
+                mapSize: gameState.game.map_size,
+                buildingCount: gameState.map.filter(m => m.building_type_id).length,
+                playerStats: gameState.players.map(p => ({
+                    name: p.player_name,
+                    race: p.race_name,
+                    gold: p.gold,
+                    active: p.is_active,
+                    unitCount: gameState.units.filter(u => u.player_id === p.id).length,
+                    buildingCount: gameState.map.filter(m => m.owner_player_id === p.id && m.building_type_id).length
+                }))
+            };
+            
+            socket.emit('admin_game_engine_stats', stats);
+        } else {
+            socket.emit('error', result.message);
+        }
+        
+    } catch (error) {
+        console.error('Error getting game engine stats:', error);
+        socket.emit('error', 'Fehler beim Abrufen der Game Engine Statistiken');
+    }
+});
+
+socket.on('admin_reset_unit_actions', async (data) => {
+    try {
+        if (!data.gameId) {
+            socket.emit('error', 'Game ID required');
+            return;
+        }
+        
+        console.log(`Admin resetting unit actions for game ${data.gameId}`);
+        
+        // Alle Einheiten zurücksetzen
+        await db.query(`
+            UPDATE game_units gu
+            JOIN units u ON gu.unit_id = u.id
+            SET gu.movement_points_left = u.movement_points,
+                gu.has_attacked = 0
+            WHERE gu.game_id = ?
+        `, [data.gameId]);
+        
+        // Invalidiere Cache
+        gameEngine.activeGames.delete(data.gameId);
+        
+        // Alle Spieler benachrichtigen
+        io.to(`db_game_${data.gameId}`).emit('units_reset', {
+            message: 'Alle Einheiten wurden von einem Administrator zurückgesetzt'
+        });
+        
+        socket.emit('admin_action_success', {
+            action: 'reset_unit_actions',
+            gameId: data.gameId
+        });
+        
+    } catch (error) {
+        console.error('Error resetting unit actions:', error);
+        socket.emit('error', 'Fehler beim Zurücksetzen der Einheiten-Aktionen');
+    }
+});
+
+socket.on('admin_add_gold', async (data) => {
+    try {
+        if (!data.gameId || !data.playerId || !data.amount) {
+            socket.emit('error', 'Game ID, Player ID und Amount required');
+            return;
+        }
+        
+        console.log(`Admin adding ${data.amount} gold to player ${data.playerId} in game ${data.gameId}`);
+        
+        await db.query(
+            'UPDATE game_players SET gold = gold + ? WHERE id = ? AND game_id = ?',
+            [data.amount, data.playerId, data.gameId]
+        );
+        
+        // Invalidiere Cache
+        gameEngine.activeGames.delete(data.gameId);
+        
+        // Alle Spieler benachrichtigen
+        io.to(`db_game_${data.gameId}`).emit('gold_added', {
+            playerId: data.playerId,
+            amount: data.amount,
+            message: `${data.amount} Gold wurde von einem Administrator hinzugefügt`
+        });
+        
+        socket.emit('admin_action_success', {
+            action: 'add_gold',
+            gameId: data.gameId,
+            playerId: data.playerId,
+            amount: data.amount
+        });
+        
+    } catch (error) {
+        console.error('Error adding gold:', error);
+        socket.emit('error', 'Fehler beim Hinzufügen von Gold');
+    }
+});
+
+// Zusätzliche Utility-Events
+socket.on('get_unit_details', async (data) => {
+    try {
+        if (!data.unitId) {
+            socket.emit('error', 'Unit ID required');
+            return;
+        }
+        
+        const unitDetails = await db.query(`
+            SELECT 
+                gu.*,
+                u.name as unit_name,
+                u.attack_power,
+                u.health as max_health,
+                u.movement_points as max_movement_points,
+                u.attack_range,
+                u.cost,
+                gp.player_name as player_name,
+                r.name as race_name,
+                r.color_hex as player_color
+            FROM game_units gu
+            JOIN units u ON gu.unit_id = u.id
+            JOIN game_players gp ON gu.player_id = gp.id
+            JOIN races r ON gp.race_id = r.id
+            WHERE gu.id = ?
+        `, [data.unitId]);
+        
+        if (unitDetails.length > 0) {
+            socket.emit('unit_details', unitDetails[0]);
+        } else {
+            socket.emit('error', 'Einheit nicht gefunden');
+        }
+        
+    } catch (error) {
+        console.error('Error getting unit details:', error);
+        socket.emit('error', 'Fehler beim Abrufen der Einheiten-Details');
+    }
+});
+
+socket.on('get_building_details', async (data) => {
+    try {
+        if (data.x === undefined || data.y === undefined || !data.gameId) {
+            socket.emit('error', 'Coordinates and Game ID required');
+            return;
+        }
+        
+        const buildingDetails = await db.query(`
+            SELECT 
+                gm.*,
+                bt.name as building_name,
+                bt.color_hex as building_color,
+                bt.gold_income,
+                bt.max_health as building_max_health,
+                gp.player_name as owner_name,
+                r.name as owner_race,
+                r.color_hex as owner_color
+            FROM game_maps gm
+            LEFT JOIN building_types bt ON gm.building_type_id = bt.id
+            LEFT JOIN game_players gp ON gm.owner_player_id = gp.id
+            LEFT JOIN races r ON gp.race_id = r.id
+            WHERE gm.game_id = ? AND gm.x_coordinate = ? AND gm.y_coordinate = ?
+        `, [data.gameId, data.x, data.y]);
+        
+        if (buildingDetails.length > 0) {
+            socket.emit('building_details', buildingDetails[0]);
+        } else {
+            socket.emit('error', 'Feld nicht gefunden');
+        }
+        
+    } catch (error) {
+        console.error('Error getting building details:', error);
+        socket.emit('error', 'Fehler beim Abrufen der Gebäude-Details');
+    }
+});
 });
 
 // Periodic cleanup of stale connections and old chat rooms

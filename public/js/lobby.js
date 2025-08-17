@@ -811,8 +811,8 @@ class LobbyManager {
         
         // Reset all race cards but keep click functionality
         document.querySelectorAll('.race-card').forEach(card => {
-            // Remove all player indicators
-            const indicators = card.querySelectorAll('.race-players-indicator');
+            // Remove ALL old indicators (including taken-indicators)
+            const indicators = card.querySelectorAll('.race-players-indicator, .taken-indicator, .confirmed-indicator');
             indicators.forEach(indicator => indicator.remove());
             
             // Reset classes but keep base functionality
@@ -830,6 +830,7 @@ class LobbyManager {
             
             // Ensure card is always clickable
             card.style.pointerEvents = '';
+            card.style.position = 'relative'; // Needed for positioning indicators
         });
 
         // Group players by race for display
@@ -843,11 +844,11 @@ class LobbyManager {
             }
         });
 
-        // Add indicators for each race that has players
+        // Add ONLY the new bottom indicators for each race that has players
         raceGroups.forEach((players, raceId) => {
             const raceCard = document.querySelector(`[data-race-id="${raceId}"]`);
             if (raceCard) {
-                // Create players indicator
+                // Create players indicator (ONLY at bottom)
                 const indicator = document.createElement('div');
                 indicator.className = 'race-players-indicator';
                 
@@ -878,7 +879,6 @@ class LobbyManager {
                     line-height: 1.2;
                 `;
                 
-                raceCard.style.position = 'relative';
                 raceCard.appendChild(indicator);
                 
                 // Add visual styling based on selection status

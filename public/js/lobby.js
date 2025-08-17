@@ -168,12 +168,6 @@ class StrategyGameClient {
             confirmCreateGameBtn.addEventListener('click', () => this.createGame());
         }
 
-        // Game joining
-        const joinGameBtn = document.getElementById('joinGameBtn');
-        if (joinGameBtn) {
-            joinGameBtn.addEventListener('click', () => this.joinSelectedGame());
-        }
-
         // Game lobby
         const leaveGameBtn = document.getElementById('leaveGameBtn');
         if (leaveGameBtn) {
@@ -565,19 +559,15 @@ class StrategyGameClient {
     }
 
     // UI-State aktualisieren
-    updateUIState() {
-        const createGameBtn = document.getElementById('createGameBtn');
-        const joinGameBtn = document.getElementById('joinGameBtn');
-        
-        if (createGameBtn) {
-            createGameBtn.disabled = !this.playerName;
-        }
-        
-        if (joinGameBtn) {
-            const selectedGame = document.querySelector('#gamesList .game-item.selected');
-            joinGameBtn.disabled = !this.playerName || !selectedGame;
-        }
+updateUIState() {
+    const createGameBtn = document.getElementById('createGameBtn');
+    
+    if (createGameBtn) {
+        createGameBtn.disabled = !this.playerName;
     }
+    
+    // joinGameBtn Code entfernen, da Button nicht mehr existiert
+}
 
     // Verfügbare Spiele laden
     loadAvailableGames() {
@@ -635,27 +625,6 @@ class StrategyGameClient {
         this.closeModals();
     }
 
-    // Ausgewähltes Spiel beitreten
-    joinSelectedGame() {
-        const selectedGame = document.querySelector('#gamesList .game-item.selected');
-        if (!selectedGame) {
-            showNotification('Bitte wähle ein Spiel aus', 'error');
-            return;
-        }
-        
-        if (!this.playerName) {
-            showNotification('Bitte gib zuerst einen Spielernamen ein', 'error');
-            return;
-        }
-        
-        const gameId = selectedGame.dataset.gameId;
-        console.log('Joining game:', gameId);
-        
-        this.socket.emit('join_game', {
-            gameId: gameId,
-            playerName: this.playerName
-        });
-    }
 
     // Aktuelles Spiel verlassen
     leaveCurrentGame() {
@@ -837,33 +806,51 @@ class StrategyGameClient {
             return;
         }
         
-        games.forEach(game => {
-            const gameItem = document.createElement('div');
-            gameItem.className = 'game-item';
-            gameItem.dataset.gameId = game.id;
-            
-            gameItem.innerHTML = `
-                <div class="game-info">
-                    <h4>${this.escapeHtml(game.name)}</h4>
-                    <p>Spieler: ${game.currentPlayers}/${game.maxPlayers}</p>
-                    <p>Kartengröße: ${game.mapSize}x${game.mapSize}</p>
-                </div>
-                <div class="game-actions">
-                    <button class="btn btn-primary join-game-btn" ${game.currentPlayers >= game.maxPlayers ? 'disabled' : ''}>
-                        ${game.currentPlayers >= game.maxPlayers ? 'Voll' : 'Beitreten'}
-                    </button>
-                </div>
-            `;
-            
-            gameItem.addEventListener('click', () => {
-                document.querySelectorAll('.game-item').forEach(item => item.classList.remove('selected'));
-                gameItem.classList.add('selected');
-                this.updateUIState();
-            });
-            
-            gamesList.appendChild(gameItem);
+        // In lobby.js - updateGamesList Funktion
+games.forEach(game => {
+    const gameItem = document.createElement('div');
+    gameItem.className = 'game-item';
+    gameItem.dataset.gameId = game.id;
+    
+    gameItem.innerHTML = `
+        <div class="game-info">
+            <h4>${this.escapeHtml(game.name)}</h4>
+            <p>Spieler: ${game.currentPlayers}/${game.maxPlayers}</p>
+            <p>Kartengröße: ${game.mapSize}x${game.mapSize}</p>
+        </div>
+        <div class="game-actions">
+            <button class="btn btn-primary join-game-btn" ${game.currentPlayers >= game.maxPlayers ? 'disabled' : ''}>
+                ${game.currentPlayers >= game.maxPlayers ? 'Voll' : 'Beitreten'}
+            </button>
+        </div>
+    `;
+    
+    // Event-Listener für den Beitreten-Button hinzufügen
+    const joinBtn = gameItem.querySelector('.join-game-btn');
+    if (joinBtn && !joinBtn.disabled) {
+        joinBtn.addEventListener('click', (e) => {
+            e.stopPropagation(); // Verhindert, dass das gameItem-Click Event ausgelöst wird
+            this.joinGame(game.id, game.name);
         });
     }
+    
+    gamesList.appendChild(gameItem);
+});
+    }
+	
+	joinGame(gameId, gameName) {
+    if (!this.playerName) {
+        showNotification('Bitte gib zuerst einen Spielernamen ein', 'error');
+        return;
+    }
+    
+    console.log('Joining game:', gameId, gameName);
+    
+    this.socket.emit('join_game', {
+        gameId: gameId,
+        playerName: this.playerName
+    });
+}
 
     // Game Players List aktualisieren
     updateGamePlayersList(players) {

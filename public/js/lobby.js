@@ -240,7 +240,11 @@ class LobbyManager {
 
         this.socket.on('game_started', (data) => {
             showNotification('Spiel startet! Weiterleitung...', 'success');
+            
+            // Make modal closeable again and hide it
+            makeModalCloseable('raceSelectionModal');
             hideModal('raceSelectionModal');
+            
             setTimeout(() => {
                 window.location.href = `/game/${data.dbGameId}`;
             }, 2000);
@@ -672,6 +676,9 @@ class LobbyManager {
         
         this.setupRaceSelectionModal();
         showModal('raceSelectionModal');
+        
+        // Make the race selection modal persistent (cannot be closed by clicking outside or ESC)
+        makeModalPersistent('raceSelectionModal');
         
         // Add debug info to modal if needed
         const modal = document.getElementById('raceSelectionModal');

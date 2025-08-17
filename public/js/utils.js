@@ -45,7 +45,7 @@ function hideModal(modalId) {
     }
 }
 
-// Setup modal close functionality
+// Setup modal close functionality with configurable options
 function setupModalCloseHandlers() {
     // Close modal when clicking the X button
     document.querySelectorAll('.modal .close').forEach(closeBtn => {
@@ -57,20 +57,94 @@ function setupModalCloseHandlers() {
         });
     });
 
-    // Close modal when clicking outside of it
+    // Close modal when clicking outside of it (with exceptions for certain modals)
     document.querySelectorAll('.modal').forEach(modal => {
         modal.addEventListener('click', function(e) {
             if (e.target === this) {
+                // Check if this modal should be closeable by outside click
+                const isRaceSelectionModal = this.id === 'raceSelectionModal';
+                
+                if (!isRaceSelectionModal) {
+                    hideModal(this.id);
+                }
+                // Race selection modal will NOT close when clicking outside
+            }
+        });
+    });
+
+    // Close modal with Escape key (with exceptions for certain modals)
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            const openModal = document.querySelector('.modal[style*="block"]');
+            if (openModal) {
+                // Check if this modal should be closeable by Escape key
+                const isRaceSelectionModal = openModal.id === 'raceSelectionModal';
+                
+                if (!isRaceSelectionModal) {
+                    hideModal(openModal.id);
+                }
+                // Race selection modal will NOT close with Escape key
+            }
+        }
+    });
+}
+
+// Alternative approach: Function to make specific modals non-closeable
+function makeModalPersistent(modalId) {
+    const modal = document.getElementById(modalId);
+    if (!modal) return;
+    
+    // Add a data attribute to mark this modal as persistent
+    modal.setAttribute('data-persistent', 'true');
+    
+    // Remove existing outside-click handlers for this specific modal
+    modal.removeEventListener('click', modal._outsideClickHandler);
+    
+    // Add new handler that respects the persistent flag
+    modal._outsideClickHandler = function(e) {
+        if (e.target === this && !this.hasAttribute('data-persistent')) {
+            hideModal(this.id);
+        }
+    };
+    
+    modal.addEventListener('click', modal._outsideClickHandler);
+}
+
+// Function to make modal closeable again
+function makeModalCloseable(modalId) {
+    const modal = document.getElementById(modalId);
+    if (!modal) return;
+    
+    // Remove the persistent attribute
+    modal.removeAttribute('data-persistent');
+}
+
+// Enhanced setup function that respects persistent modals
+function setupEnhancedModalCloseHandlers() {
+    // Close modal when clicking the X button
+    document.querySelectorAll('.modal .close').forEach(closeBtn => {
+        closeBtn.addEventListener('click', function() {
+            const modal = this.closest('.modal');
+            if (modal) {
+                hideModal(modal.id);
+            }
+        });
+    });
+
+    // Close modal when clicking outside of it (respecting persistent flag)
+    document.querySelectorAll('.modal').forEach(modal => {
+        modal.addEventListener('click', function(e) {
+            if (e.target === this && !this.hasAttribute('data-persistent')) {
                 hideModal(this.id);
             }
         });
     });
 
-    // Close modal with Escape key
+    // Close modal with Escape key (respecting persistent flag)
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') {
             const openModal = document.querySelector('.modal[style*="block"]');
-            if (openModal) {
+            if (openModal && !openModal.hasAttribute('data-persistent')) {
                 hideModal(openModal.id);
             }
         }
@@ -296,7 +370,8 @@ function throttle(func, limit) {
 
 // Initialize utilities
 document.addEventListener('DOMContentLoaded', function() {
-    setupModalCloseHandlers();
+    // Use the enhanced modal setup that respects persistent modals
+    setupEnhancedModalCloseHandlers();
     
     // Add CSS for notification animations
     if (!document.querySelector('#notification-styles')) {
@@ -324,6 +399,8 @@ if (typeof module !== 'undefined' && module.exports) {
         showNotification,
         showModal,
         hideModal,
+        makeModalPersistent,
+        makeModalCloseable,
         validatePlayerName,
         validateGameName,
         saveToLocalStorage,

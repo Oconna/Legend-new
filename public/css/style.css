@@ -308,7 +308,7 @@ input:focus, select:focus {
     padding: 1.5rem;
 }
 
-/* Race Selection */
+/* Race Selection Improvements */
 .race-selection {
     text-align: center;
 }
@@ -341,16 +341,211 @@ input:focus, select:focus {
     min-height: 120px;
 }
 
-.race-card:hover:not(.unavailable):not(.confirmed) {
+.race-card:hover {
     border-color: #3498db;
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(0,0,0,0.1);
 }
 
-.race-card.selected {
+.race-card.own-selection {
     border-color: #f39c12;
     background: #fef9e7;
     transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(243, 156, 18, 0.3);
+}
+
+.race-card.own-confirmed {
+    border-color: #2ecc71;
+    background: #d5f4e6;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(46, 204, 113, 0.3);
+    cursor: not-allowed;
+}
+
+.race-card.has-selecting-players {
+    border-color: #3498db;
+    background: #ebf3fd;
+}
+
+.race-card.has-confirmed-players {
+    border-color: #27ae60;
+    background: #e8f5e8;
+}
+
+.race-color {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    margin: 0 auto 0.5rem;
+    border: 3px solid white;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.race-card h4 {
+    margin: 0.5rem 0;
+    color: #2c3e50;
+    font-size: 1rem;
+}
+
+.race-card p {
+    margin: 0;
+    color: #7f8c8d;
+    font-size: 0.85rem;
+    line-height: 1.3;
+}
+
+.race-players-indicator {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: rgba(52, 152, 219, 0.9);
+    color: white;
+    padding: 0.25rem;
+    font-size: 0.7rem;
+    text-align: center;
+    border-radius: 0 0 6px 6px;
+    font-weight: bold;
+    line-height: 1.2;
+}
+
+.race-info {
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    min-height: 80px;
+}
+
+.selected-race-info h4 {
+    color: #f39c12;
+    margin-bottom: 0.5rem;
+}
+
+.selected-race-info h4.confirmed {
+    color: #2ecc71;
+}
+
+.selected-race-info p {
+    color: #34495e;
+    margin-bottom: 0.5rem;
+}
+
+.race-selection-actions {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    margin-bottom: 1rem;
+}
+
+.race-selection-status {
+    background: #3498db;
+    color: white;
+    padding: 0.75rem;
+    border-radius: 6px;
+    margin-bottom: 1rem;
+}
+
+.race-selection-status.confirmed {
+    background: #2ecc71;
+}
+
+.race-selection-status p {
+    margin: 0;
+    font-weight: bold;
+}
+
+.race-players-status {
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 1rem;
+    text-align: left;
+}
+
+.race-players-status h4 {
+    margin-bottom: 1rem;
+    text-align: center;
+    color: #2c3e50;
+}
+
+.players-race-status {
+    display: grid;
+    gap: 0.5rem;
+}
+
+.player-race-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem;
+    background: white;
+    border-radius: 4px;
+    border-left: 4px solid #bdc3c7;
+}
+
+.player-race-item.selecting {
+    border-left-color: #f39c12;
+}
+
+.player-race-item.confirmed {
+    border-left-color: #2ecc71;
+}
+
+.player-race-name {
+    font-weight: bold;
+    color: #2c3e50;
+}
+
+.player-race-status {
+    font-size: 0.9rem;
+    color: #7f8c8d;
+}
+
+.player-race-status.confirmed {
+    color: #2ecc71;
+    font-weight: bold;
+}
+
+.player-race-status.selecting {
+    color: #f39c12;
+    font-weight: bold;
+}
+
+/* Responsive for race selection */
+@media (max-width: 768px) {
+    .races-grid {
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 0.75rem;
+    }
+    
+    .race-card {
+        padding: 0.75rem;
+        min-height: 100px;
+    }
+    
+    .race-color {
+        width: 30px;
+        height: 30px;
+    }
+    
+    .race-card h4 {
+        font-size: 0.9rem;
+    }
+    
+    .race-card p {
+        font-size: 0.8rem;
+    }
+    
+    .race-selection-actions {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+    
+    .race-players-indicator {
+        font-size: 0.6rem;
+        padding: 0.2rem;
+    }
+} translateY(-2px);
     box-shadow: 0 4px 12px rgba(243, 156, 18, 0.3);
 }
 
@@ -551,6 +746,7 @@ input:focus, select:focus {
         gap: 0.5rem;
     }
 }
+
 
 /* Game Page Styles */
 .game-body {

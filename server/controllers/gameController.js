@@ -55,25 +55,8 @@ class GameController {
                 return { success: false, message: 'Du hast bereits eine Rasse bestätigt' };
             }
 
-            // Wenn nur Auswahl: Erlaube Änderung auch wenn bereits eine Auswahl existiert (aber nicht bestätigt)
-            if (!confirmed && player[0].race_confirmed) {
-                return { success: false, message: 'Bestätigte Rassen können nicht mehr geändert werden' };
-            }
-
+            // Bei Bestätigung oder Auswahl: Erlaube mehrere Spieler pro Rasse
             if (confirmed) {
-                // Bei Bestätigung: Prüfe ob die Rasse bereits von einem anderen Spieler bestätigt wurde
-                const existingConfirmedRace = await db.query(
-                    'SELECT id, player_name FROM game_players WHERE game_id = ? AND race_id = ? AND player_name != ? AND race_confirmed = true',
-                    [gameId, raceId, playerName]
-                );
-
-                if (existingConfirmedRace.length > 0) {
-                    return { 
-                        success: false, 
-                        message: `Diese Rasse wurde bereits von ${existingConfirmedRace[0].player_name} bestätigt` 
-                    };
-                }
-
                 // Speichere die bestätigte Rassenwahl in der Datenbank
                 await db.query(
                     'UPDATE game_players SET race_id = ?, race_confirmed = true WHERE game_id = ? AND player_name = ?',
@@ -82,7 +65,7 @@ class GameController {
 
                 console.log(`✅ Race ${race[0].name} confirmed by player ${playerName}`);
             } else {
-                // Nur Auswahl speichern (nicht bestätigt) - erlaube Überschreibung
+                // Nur Auswahl speichern (nicht bestätigt) - überschreibe vorherige Auswahl
                 await db.query(
                     'UPDATE game_players SET race_id = ?, race_confirmed = false WHERE game_id = ? AND player_name = ?',
                     [raceId, gameId, playerName]
@@ -96,11 +79,7 @@ class GameController {
                 SELECT 
                     COUNT(*) as total_players,
                     SUM(CASE WHEN race_id IS NOT NULL AND race_confirmed = true THEN 1 ELSE 0 END) as races_confirmed,
-                    SUM(CASE WHEN race_id IS NOT NULL THEN 1 ELSE 0 END) as races_selected,
-                    GROUP_CONCAT(
-                        CONCAT(player_name, ':', COALESCE(race_id, 'null'), ':', COALESCE(race_confirmed, 'false')) 
-                        SEPARATOR ', '
-                    ) as player_status
+                    SUM(CASE WHEN race_id IS NOT NULL THEN 1 ELSE 0 END) as races_selected
                 FROM game_players 
                 WHERE game_id = ? AND is_active = true
             `, [gameId]);
@@ -112,8 +91,7 @@ class GameController {
                 totalPlayers: status.total_players,
                 racesSelected: status.races_selected,
                 racesConfirmed: status.races_confirmed,
-                allRacesConfirmed: allRacesConfirmed,
-                playerStatus: status.player_status
+                allRacesConfirmed: allRacesConfirmed
             });
 
             return {

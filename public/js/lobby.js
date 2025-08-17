@@ -172,9 +172,7 @@ class LobbyManager {
         });
 
         this.socket.on('player_race_selected', (data) => {
-            // Update local tracking of player selections (not confirmed yet)
-            const existingStatus = this.playersRaceStatus.get(data.playerName);
-            
+            // Update local tracking of player selections (live updates)
             this.playersRaceStatus.set(data.playerName, {
                 playerName: data.playerName,
                 selectedRaceId: data.raceId,
@@ -183,11 +181,12 @@ class LobbyManager {
             });
             
             if (data.playerName !== this.playerName) {
-                showNotification(`${data.playerName} wählt ${data.raceName}...`, 'info');
+                showNotification(`${data.playerName} wählt ${data.raceName}`, 'info');
             }
             
-            // Only update player status display, not race cards UI for unconfirmed selections
+            // Update both player status and race cards for live feedback
             this.updatePlayersRaceStatus();
+            this.updateRaceCardsDisplay();
         });
 
         this.socket.on('player_race_confirmed', (data) => {
@@ -201,12 +200,10 @@ class LobbyManager {
             
             if (data.playerName !== this.playerName) {
                 showNotification(`${data.playerName} hat ${data.raceName} bestätigt`, 'success');
-                
-                // Only mark race as unavailable when it's confirmed
-                this.updateRaceSelection(data.raceId, data.playerName);
             }
             
             this.updatePlayersRaceStatus();
+            this.updateRaceCardsDisplay();
             this.updateRaceSelectionStatus(data.confirmedCount, data.totalPlayers);
         });
 
@@ -214,21 +211,17 @@ class LobbyManager {
             // Update local tracking - player deselected race
             const playerStatus = this.playersRaceStatus.get(data.playerName);
             if (playerStatus) {
-                // Only clear if it was confirmed (UI cleanup needed)
-                if (playerStatus.confirmed && playerStatus.selectedRaceId) {
-                    this.clearPlayerRaceFromUI(data.playerName, playerStatus.selectedRaceId);
-                }
-                
                 playerStatus.selectedRaceId = null;
                 playerStatus.confirmed = false;
                 playerStatus.raceName = null;
             }
             
             if (data.playerName !== this.playerName) {
-                showNotification(`${data.playerName} hat die Rassenauswahl zurückgesetzt`, 'info');
+                showNotification(`${data.playerName} hat die Auswahl zurückgesetzt`, 'info');
             }
             
             this.updatePlayersRaceStatus();
+            this.updateRaceCardsDisplay();
         });
 
         this.socket.on('race_deselection_confirmed', (data) => {
@@ -711,7 +704,7 @@ class LobbyManager {
             });
         });
 
-        // Apply current state based on playersRaceStatus
+        // Apply current state
         this.applyCurrentRaceStates();
 
         // Initialize status displays
@@ -755,29 +748,24 @@ class LobbyManager {
     }
 
     selectRace(raceId) {
-        console.log('Selecting race (not confirming yet):', raceId);
+        console.log('Selecting race:', raceId);
         
         // Don't allow selection if already confirmed
         if (this.raceConfirmed) {
             showNotification('Du hast bereits eine Rasse bestätigt. Klicke auf "Rasse ändern" um eine neue zu wählen.', 'warning');
             return;
         }
-        
-        // Check if race already confirmed by someone else
-        const raceCard = document.querySelector(`[data-race-id="${raceId}"]`);
-        if (raceCard && raceCard.classList.contains('unavailable')) {
-            showNotification('Diese Rasse wurde bereits bestätigt', 'warning');
-            return;
-        }
 
-        // Clear previous selection visually (no server notification needed for unconfirmed changes)
+        // Update UI to show new selection
         document.querySelectorAll('.race-card').forEach(card => {
-            card.classList.remove('selected');
+            if (card.classList.contains('own-selection')) {
+                card.classList.remove('own-selection');
+            }
         });
         
-        // Update UI to show new selection
+        const raceCard = document.querySelector(`[data-race-id="${raceId}"]`);
         if (raceCard) {
-            raceCard.classList.add('selected');
+            raceCard.classList.add('own-selection');
         }
 
         this.selectedRaceId = raceId;
@@ -798,12 +786,94 @@ class LobbyManager {
             }
         }
 
-        // Update buttons
+        // Update buttons and status
         this.updateRaceSelectionButtons();
         this.updateRaceSelectionStatus();
         
-        // Notify server about selection (but not confirmation)
+        // Notify server about selection (live update)
         this.notifyRaceSelection(raceId, false);
+    }
+
+    updateRaceCardsDisplay() {
+        // Reset all race cards
+        document.querySelectorAll('.race-card').forEach(card => {
+            // Remove all player indicators
+            const indicators = card.querySelectorAll('.race-players-indicator');
+            indicators.forEach(indicator => indicator.remove());
+            
+            // Reset classes (keep own selection)
+            const isOwnSelection = card.classList.contains('own-selection');
+            card.className = 'race-card';
+            if (isOwnSelection && !this.raceConfirmed) {
+                card.classList.add('own-selection');
+            }
+        });
+
+        // Group players by race
+        const raceGroups = new Map();
+        this.playersRaceStatus.forEach((status, playerName) => {
+            if (status.selectedRaceId) {
+                if (!raceGroups.has(status.selectedRaceId)) {
+                    raceGroups.set(status.selectedRaceId, []);
+                }
+                raceGroups.get(status.selectedRaceId).push(status);
+            }
+        });
+
+        // Add indicators for each race
+        raceGroups.forEach((players, raceId) => {
+            const raceCard = document.querySelector(`[data-race-id="${raceId}"]`);
+            if (raceCard) {
+                // Create players indicator
+                const indicator = document.createElement('div');
+                indicator.className = 'race-players-indicator';
+                
+                const confirmedPlayers = players.filter(p => p.confirmed);
+                const unconfirmedPlayers = players.filter(p => !p.confirmed);
+                
+                let indicatorText = '';
+                if (confirmedPlayers.length > 0) {
+                    indicatorText += `✅ ${confirmedPlayers.map(p => p.playerName).join(', ')}`;
+                }
+                if (unconfirmedPlayers.length > 0) {
+                    if (indicatorText) indicatorText += ' ';
+                    indicatorText += `🤔 ${unconfirmedPlayers.map(p => p.playerName).join(', ')}`;
+                }
+                
+                indicator.textContent = indicatorText;
+                indicator.style.cssText = `
+                    position: absolute;
+                    bottom: 0;
+                    left: 0;
+                    right: 0;
+                    background: rgba(52, 152, 219, 0.9);
+                    color: white;
+                    padding: 0.25rem;
+                    font-size: 0.7rem;
+                    text-align: center;
+                    border-radius: 0 0 6px 6px;
+                `;
+                
+                raceCard.style.position = 'relative';
+                raceCard.appendChild(indicator);
+                
+                // Add visual styling based on selection status
+                if (confirmedPlayers.length > 0) {
+                    raceCard.classList.add('has-confirmed-players');
+                } else {
+                    raceCard.classList.add('has-selecting-players');
+                }
+            }
+        });
+
+        // Mark own confirmed race
+        if (this.raceConfirmed && this.selectedRaceId) {
+            const ownCard = document.querySelector(`[data-race-id="${this.selectedRaceId}"]`);
+            if (ownCard) {
+                ownCard.classList.remove('own-selection');
+                ownCard.classList.add('own-confirmed');
+            }
+        }
     }
     
     confirmRaceSelection() {

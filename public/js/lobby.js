@@ -175,10 +175,10 @@ class LobbyManager {
             // Update local tracking of player selections (not confirmed yet)
             const existingStatus = this.playersRaceStatus.get(data.playerName);
             
-            // Clear any previous race selection for this player
+            // Clear any previous race selection for this player in UI
             if (existingStatus && existingStatus.selectedRaceId && existingStatus.selectedRaceId !== data.raceId) {
-                // Player changed their selection
                 console.log(`Player ${data.playerName} changed race from ${existingStatus.selectedRaceId} to ${data.raceId}`);
+                this.clearPlayerRaceFromUI(data.playerName, existingStatus.selectedRaceId);
             }
             
             this.playersRaceStatus.set(data.playerName, {
@@ -196,6 +196,12 @@ class LobbyManager {
         });
 
         this.socket.on('player_race_confirmed', (data) => {
+            // Clear any previous race selection for this player first
+            const existingStatus = this.playersRaceStatus.get(data.playerName);
+            if (existingStatus && existingStatus.selectedRaceId && existingStatus.selectedRaceId !== data.raceId) {
+                this.clearPlayerRaceFromUI(data.playerName, existingStatus.selectedRaceId);
+            }
+            
             // Update player status to confirmed
             const playerStatus = this.playersRaceStatus.get(data.playerName);
             if (playerStatus) {
@@ -216,8 +222,13 @@ class LobbyManager {
         });
 
         this.socket.on('player_race_deselected', (data) => {
-            // Update local tracking - player deselected race
+            // Get the player's previous race selection to clear it from UI
             const playerStatus = this.playersRaceStatus.get(data.playerName);
+            if (playerStatus && playerStatus.selectedRaceId) {
+                this.clearPlayerRaceFromUI(data.playerName, playerStatus.selectedRaceId);
+            }
+            
+            // Update local tracking - player deselected race
             if (playerStatus) {
                 playerStatus.selectedRaceId = null;
                 playerStatus.confirmed = false;
@@ -692,6 +703,9 @@ class LobbyManager {
         const racesList = document.getElementById('racesList');
         if (!racesList || !this.availableRaces.length) return;
         
+        // Clear any existing race card states first
+        this.resetAllRaceCards();
+        
         racesList.innerHTML = this.availableRaces.map(race => `
             <div class="race-card" data-race-id="${race.id}">
                 <div class="race-color" style="background-color: ${race.color_hex}"></div>
@@ -708,10 +722,47 @@ class LobbyManager {
             });
         });
 
+        // Apply current state based on playersRaceStatus
+        this.applyCurrentRaceStates();
+
         // Initialize status displays
         this.updateRaceSelectionStatus();
         this.updatePlayersRaceStatus();
         this.updateRaceSelectionButtons();
+    }
+
+    resetAllRaceCards() {
+        const allRaceCards = document.querySelectorAll('.race-card');
+        allRaceCards.forEach(card => {
+            card.classList.remove('selected', 'confirmed', 'unavailable');
+            card.style.pointerEvents = '';
+            card.style.position = '';
+            
+            // Remove all indicators
+            const indicators = card.querySelectorAll('.taken-indicator, .confirmed-indicator');
+            indicators.forEach(indicator => indicator.remove());
+        });
+    }
+
+    applyCurrentRaceStates() {
+        // Apply states based on current playersRaceStatus
+        this.playersRaceStatus.forEach((status, playerName) => {
+            if (status.confirmed && status.selectedRaceId) {
+                this.updateRaceSelection(status.selectedRaceId, playerName);
+            }
+        });
+        
+        // Apply own selection if any
+        if (this.selectedRaceId) {
+            const ownCard = document.querySelector(`[data-race-id="${this.selectedRaceId}"]`);
+            if (ownCard) {
+                if (this.raceConfirmed) {
+                    ownCard.classList.add('confirmed');
+                } else {
+                    ownCard.classList.add('selected');
+                }
+            }
+        }
     }
 
     selectRace(raceId) {
@@ -730,8 +781,9 @@ class LobbyManager {
             return;
         }
 
-        // If player had a different race selected before, notify server about deselection
+        // If player had a different race selected before, clear it first
         if (this.selectedRaceId && this.selectedRaceId !== raceId) {
+            this.clearPlayerRaceFromUI(this.playerName, this.selectedRaceId);
             this.notifyRaceDeselection();
         }
 
@@ -943,7 +995,33 @@ class LobbyManager {
         }).join('');
     }
 
+    clearPlayerRaceFromUI(playerName, raceId) {
+        console.log(`Clearing race ${raceId} from UI for player ${playerName}`);
+        
+        const raceCard = document.querySelector(`[data-race-id="${raceId}"]`);
+        if (raceCard) {
+            // Remove all player-specific indicators
+            const indicators = raceCard.querySelectorAll('.taken-indicator, .confirmed-indicator');
+            indicators.forEach(indicator => {
+                if (indicator.textContent.includes(playerName)) {
+                    indicator.remove();
+                }
+            });
+            
+            // Reset card state if no other indicators exist
+            const remainingIndicators = raceCard.querySelectorAll('.taken-indicator, .confirmed-indicator');
+            if (remainingIndicators.length === 0) {
+                raceCard.classList.remove('unavailable', 'confirmed');
+                raceCard.style.pointerEvents = '';
+                raceCard.style.position = '';
+            }
+        }
+    }
+
     updateRaceSelection(raceId, playerName) {
+        // First clear any existing indicators for this player from all cards
+        this.clearAllPlayerIndicators(playerName);
+        
         // Mark race as unavailable for other players (only when confirmed)
         const raceCard = document.querySelector(`[data-race-id="${raceId}"]`);
         if (raceCard && playerName !== this.playerName) {
@@ -968,6 +1046,27 @@ class LobbyManager {
             raceCard.style.position = 'relative';
             raceCard.appendChild(takenIndicator);
         }
+    }
+
+    clearAllPlayerIndicators(playerName) {
+        // Remove all indicators for this player from all race cards
+        const allRaceCards = document.querySelectorAll('.race-card');
+        allRaceCards.forEach(card => {
+            const indicators = card.querySelectorAll('.taken-indicator, .confirmed-indicator');
+            indicators.forEach(indicator => {
+                if (indicator.textContent.includes(playerName)) {
+                    indicator.remove();
+                    
+                    // Reset card state if this was the only indicator
+                    const remainingIndicators = card.querySelectorAll('.taken-indicator, .confirmed-indicator');
+                    if (remainingIndicators.length === 0) {
+                        card.classList.remove('unavailable', 'confirmed');
+                        card.style.pointerEvents = '';
+                        card.style.position = '';
+                    }
+                }
+            });
+        });
     }
 
     updateRaceSelectionStatus(confirmedCount = null, totalPlayers = null) {

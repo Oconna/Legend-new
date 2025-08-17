@@ -453,6 +453,39 @@ io.on('connection', (socket) => {
         }
     });
 
+    // New event for deselecting/changing races
+    socket.on('deselect_race', async (data) => {
+        try {
+            console.log('Race deselection request:', data);
+            
+            if (!data.gameId || !data.playerName) {
+                socket.emit('error', 'Unvollständige Daten für Rassenabwahl');
+                return;
+            }
+            
+            // Reset player's race selection in database
+            const result = await gameController.deselectRace(data.gameId, data.playerName);
+            
+            if (result.success) {
+                console.log(`✓ Race deselected by ${data.playerName} in game ${data.gameId}`);
+                
+                // Notify all players about deselection
+                io.to(`db_game_${data.gameId}`).emit('player_race_deselected', {
+                    playerName: data.playerName
+                });
+                
+                socket.emit('race_deselection_confirmed', {
+                    message: 'Rassenauswahl zurückgesetzt'
+                });
+            } else {
+                socket.emit('error', result.message);
+            }
+        } catch (error) {
+            console.error('Error in deselect_race:', error);
+            socket.emit('error', 'Fehler bei der Rassenabwahl');
+        }
+    });
+
     // Get current race selections for a game
     socket.on('get_race_selections', async (data) => {
         try {

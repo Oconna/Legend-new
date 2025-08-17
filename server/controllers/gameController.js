@@ -125,6 +125,54 @@ class GameController {
         }
     }
 
+    async deselectRace(gameId, playerName) {
+        try {
+            console.log(`Player ${playerName} deselecting race in game ${gameId}`);
+
+            // Prüfe ob das Spiel existiert und in der richtigen Phase ist
+            const game = await db.query(
+                'SELECT id, status FROM games WHERE id = ? AND status = "race_selection"',
+                [gameId]
+            );
+
+            if (game.length === 0) {
+                return { success: false, message: 'Spiel nicht gefunden oder nicht in Rassenwahl-Phase' };
+            }
+
+            // Prüfe ob der Spieler existiert
+            const player = await db.query(
+                'SELECT id, player_name, race_id, race_confirmed FROM game_players WHERE game_id = ? AND player_name = ?',
+                [gameId, playerName]
+            );
+
+            if (player.length === 0) {
+                return { success: false, message: 'Spieler nicht in diesem Spiel gefunden' };
+            }
+
+            // Verhindere Deselection wenn bereits bestätigt
+            if (player[0].race_confirmed) {
+                return { success: false, message: 'Bestätigte Rassen können nicht mehr geändert werden' };
+            }
+
+            // Entferne die Rassenwahl
+            await db.query(
+                'UPDATE game_players SET race_id = NULL, race_confirmed = false WHERE game_id = ? AND player_name = ?',
+                [gameId, playerName]
+            );
+
+            console.log(`✓ Race deselected for player ${playerName}`);
+
+            return {
+                success: true,
+                playerName: playerName
+            };
+
+        } catch (error) {
+            console.error('Error deselecting race:', error);
+            return { success: false, message: 'Fehler bei der Rassenabwahl: ' + error.message };
+        }
+    }
+
     async getAllRaceSelections(gameId) {
         try {
             const selections = await db.query(`

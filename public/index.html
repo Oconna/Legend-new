@@ -11,127 +11,31 @@
         <header class="game-header">
             <h1>🏰 Online Strategiespiel</h1>
             <p>Erobere Städte, führe Armeen, herrsche über das Land!</p>
-            <div class="connection-status">
-                Status: <span id="connectionStatus" class="status disconnected">Verbindung wird hergestellt...</span>
-            </div>
         </header>
 
         <main class="lobby-main">
             <!-- Player Info Section -->
             <section class="player-section">
                 <div class="player-info">
-                    <label for="playerNameInput">Dein Name:</label>
-                    <input type="text" id="playerNameInput" placeholder="Spielername eingeben..." maxlength="20">
+                    <label for="playerName">Dein Name:</label>
+                    <input type="text" id="playerName" placeholder="Spielername eingeben..." maxlength="20">
                 </div>
             </section>
 
-            <!-- Game List Section -->
-            <section id="gameListSection" class="game-list-section">
-                <div class="section-header">
-                    <h2>Verfügbare Spiele</h2>
-                    <button id="createGameBtn" class="btn btn-primary" disabled>Neues Spiel erstellen</button>
-                </div>
-                
-                <div class="games-container">
-                    <div id="gamesList" class="games-list">
-                        <div class="loading">Lade Spiele...</div>
-                    </div>
-                    <div class="games-actions">
-                        <button id="joinGameBtn" class="btn btn-success" disabled>Spiel beitreten</button>
-                        <button id="refreshGamesBtn" class="btn btn-secondary">Aktualisieren</button>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Game Lobby Section -->
-            <section id="gameLobbySection" class="game-lobby-section" style="display: none;">
-                <div class="lobby-header">
-                    <div class="lobby-info">
-                        <h2>Spiellobby: <span id="currentGameName">-</span></h2>
-                        <div class="lobby-details">
-                            <span>Spieler: <span id="currentGamePlayerCount">0</span>/<span id="currentGameMaxPlayers">0</span></span>
-                            <span>Kartengröße: <span id="currentGameMapSize">0</span>x<span id="currentGameMapSize">0</span></span>
-                        </div>
-                    </div>
-                    <div class="lobby-actions">
-                        <button id="readyBtn" class="btn btn-success">Bereit</button>
-                        <button id="startGameBtn" class="btn btn-primary" style="display: none;" disabled>Spiel starten</button>
-                        <button id="leaveGameBtn" class="btn btn-danger">Verlassen</button>
-                    </div>
-                </div>
-
-                <div class="lobby-content">
-                    <!-- Players List -->
-                    <div class="lobby-players">
-                        <h3>Spieler im Spiel</h3>
-                        <div id="gameLobbyPlayersList" class="players-list">
-                            <!-- Players will be listed here -->
-                        </div>
-                        <div id="lobbyStatusText" class="lobby-status">
-                            Warte auf andere Spieler...
-                        </div>
-                    </div>
-
-                    <!-- Lobby Chat -->
-                    <div class="lobby-chat">
-                        <div class="chat-container">
-                            <div class="chat-header">
-                                <h4>
-                                    💬 Chat
-                                    <span class="chat-status">
-                                        <span id="lobbyChatPlayerCount">0</span> Spieler
-                                    </span>
-                                </h4>
-                            </div>
-                            <div class="chat-messages-container">
-                                <div id="lobbyChatMessages" class="chat-messages">
-                                    <!-- Chat messages will be displayed here -->
-                                </div>
-                            </div>
-                            <div class="chat-input-container">
-                                <div class="chat-input-wrapper">
-                                    <textarea 
-                                        id="lobbyChatMessageInput" 
-                                        class="chat-input" 
-                                        placeholder="Schreibe eine Nachricht..."
-                                        maxlength="500"
-                                        rows="1"></textarea>
-                                    <button id="lobbyChatSendButton" class="chat-send-btn" title="Nachricht senden">
-                                        📤
-                                    </button>
-                                </div>
-                                <div class="chat-controls">
-                                    <small class="char-count">
-                                        <span id="lobbyChatCharCount">0</span>/500
-                                    </small>
-                                    <small class="chat-hint">
-                                        Enter zum Senden
-                                    </small>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
-        </main>
-
-        <!-- Create Game Modal -->
-        <div id="createGameModal" class="modal">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h3>Neues Spiel erstellen</h3>
-                    <span class="close">&times;</span>
-                </div>
-                <div class="modal-body">
-                    <form>
+            <!-- Lobby Sections Grid -->
+            <div class="lobby-sections">
+                <!-- Game Creation Section -->
+                <section class="create-game-section">
+                    <h2>Neues Spiel erstellen</h2>
+                    <div class="game-form">
                         <div class="form-group">
-                            <label for="gameNameInput">Spielname:</label>
-                            <input type="text" id="gameNameInput" placeholder="Mein Strategiespiel" maxlength="50" required>
+                            <label for="gameName">Spielname:</label>
+                            <input type="text" id="gameName" placeholder="Mein Strategiespiel" maxlength="50">
                         </div>
                         
                         <div class="form-group">
-                            <label for="maxPlayersInput">Anzahl Spieler (2-8):</label>
-                            <select id="maxPlayersInput" required>
+                            <label for="maxPlayers">Spieler (2-8):</label>
+                            <select id="maxPlayers">
                                 <option value="2">2 Spieler</option>
                                 <option value="3">3 Spieler</option>
                                 <option value="4" selected>4 Spieler</option>
@@ -143,22 +47,63 @@
                         </div>
                         
                         <div class="form-group">
-                            <label for="mapSizeInput">Kartengröße:</label>
-                            <select id="mapSizeInput" required>
+                            <label for="mapSize">Kartengröße:</label>
+                            <select id="mapSize">
                                 <option value="20">Klein (20x20)</option>
                                 <option value="30" selected>Mittel (30x30)</option>
                                 <option value="50">Groß (50x50)</option>
-                                <option value="100">Sehr Groß (100x100)</option>
+                                <option value="100">Riesig (100x100)</option>
                             </select>
                         </div>
-                    </form>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary cancel-btn">Abbrechen</button>
-                    <button type="button" id="confirmCreateGameBtn" class="btn btn-primary">Spiel erstellen</button>
-                </div>
+                        
+                        <button id="createGameBtn" class="btn btn-primary">Spiel erstellen</button>
+                    </div>
+                </section>
+
+                <!-- Available Games Section -->
+                <section class="games-section">
+                    <h2>Verfügbare Spiele</h2>
+                    <div class="games-container">
+                        <div id="gamesList" class="games-list">
+                            <div class="loading">Lade Spiele...</div>
+                        </div>
+                    </div>
+                    <button id="refreshGamesBtn" class="btn btn-secondary">Spiele aktualisieren</button>
+                </section>
             </div>
-        </div>
+
+            <!-- Current Game Lobby Section (shown when in a game) -->
+            <section id="currentGameSection" class="current-game-section" style="display: none;">
+                <h2>Aktuelle Spiellobby</h2>
+                <div class="current-game-info">
+                    <div class="game-header">
+                        <h3 id="currentGameName">Spielname</h3>
+                        <div class="game-meta">
+                            <span>Spieler: <span id="currentGamePlayerCount">0</span>/<span id="currentGameMaxPlayers">0</span></span>
+                            <span>Karte: <span id="currentGameMapSize">0</span>x<span id="currentGameMapSizeY">0</span></span>
+                        </div>
+                    </div>
+                    
+                    <div class="players-lobby">
+                        <h4>Spieler in der Lobby:</h4>
+                        <ul id="currentGamePlayersList" class="players-lobby-list">
+                            <!-- Players will be populated here -->
+                        </ul>
+                    </div>
+                    
+                    <div class="lobby-controls">
+                        <button id="readyBtn" class="btn btn-success">Bereit</button>
+                        <button id="startGameBtn" class="btn btn-primary" style="display: none;">Spiel starten</button>
+                        <button id="leaveLobbyBtn" class="btn btn-danger">Lobby verlassen</button>
+                    </div>
+                    
+                    <div class="lobby-status">
+                        <p id="lobbyStatusText">Warte auf andere Spieler...</p>
+                        <p id="readyStatusText">Bereit: <span id="readyCount">0</span>/<span id="totalPlayers">0</span></p>
+                    </div>
+                </div>
+            </section>
+        </main>
 
         <!-- Race Selection Modal with Chat -->
         <div id="raceSelectionModal" class="modal">
@@ -190,8 +135,11 @@
                                 </div>
                                 <div class="race-selection-status">
                                     <p id="raceSelectionStatus">Wähle deine Rasse aus...</p>
-                                    <div id="raceSelectionPlayersList" class="race-players-list">
-                                        <!-- Players and their race status will be shown here -->
+                                </div>
+                                <div class="race-players-status">
+                                    <h4>Spieler Status:</h4>
+                                    <div id="racePlayersStatus" class="players-race-status">
+                                        <!-- Player race status will be shown here -->
                                     </div>
                                 </div>
                             </div>
@@ -199,41 +147,37 @@
 
                         <!-- Right side: Chat -->
                         <div class="chat-panel">
-                            <div class="chat-section">
-                                <div class="chat-container">
-                                    <div class="chat-header">
-                                        <h4>
-                                            💬 Chat
-                                            <span class="chat-status">
-                                                <span id="raceSelectionChatPlayerCount">0</span> Spieler
-                                            </span>
-                                        </h4>
+                            <div id="raceSelectionChat" class="race-chat" style="display: none;">
+                                <div class="chat-header">
+                                    <h4>💬 Chat</h4>
+                                    <span class="chat-info">
+                                        <span id="chatPlayerCount">0</span> Spieler online
+                                    </span>
+                                </div>
+                                <div class="chat-messages-container">
+                                    <div id="chatMessages" class="chat-messages">
+                                        <!-- Chat messages will be displayed here -->
                                     </div>
-                                    <div class="chat-messages-container">
-                                        <div id="chatMessages" class="chat-messages">
-                                            <!-- Chat messages will be displayed here -->
-                                        </div>
+                                </div>
+                                <div class="chat-input-container">
+                                    <div class="chat-input-wrapper">
+                                        <textarea 
+                                            id="chatMessageInput" 
+                                            class="chat-input" 
+                                            placeholder="Schreibe eine Nachricht..."
+                                            maxlength="500"
+                                            rows="1"></textarea>
+                                        <button id="chatSendButton" class="chat-send-btn" title="Nachricht senden">
+                                            📤
+                                        </button>
                                     </div>
-                                    <div class="chat-input-container">
-                                        <div class="chat-input-wrapper">
-                                            <textarea 
-                                                id="chatMessageInput" 
-                                                class="chat-input" 
-                                                placeholder="Schreibe eine Nachricht..."
-                                                maxlength="500"
-                                                rows="1"></textarea>
-                                            <button id="chatSendButton" class="chat-send-btn" title="Nachricht senden">
-                                                📤
-                                            </button>
-                                        </div>
-                                        <div class="chat-controls">
-                                            <small class="char-count">
-                                                <span id="chatCharCount">0</span>/500
-                                            </small>
-                                            <small class="chat-hint">
-                                                Enter zum Senden
-                                            </small>
-                                        </div>
+                                    <div class="chat-controls">
+                                        <small class="char-count">
+                                            <span id="chatCharCount">0</span>/500
+                                        </small>
+                                        <small class="chat-hint">
+                                            Enter zum Senden
+                                        </small>
                                     </div>
                                 </div>
                             </div>
@@ -250,6 +194,7 @@
     <!-- Scripts -->
     <script src="/socket.io/socket.io.js"></script>
     <script src="js/utils.js"></script>
+    <script src="js/chat.js"></script>
     <script src="js/lobby.js"></script>
 </body>
 </html>

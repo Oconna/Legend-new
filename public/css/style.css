@@ -1962,20 +1962,22 @@ input:focus, select:focus {
     }
 }
 
-/* Zusätzliche CSS-Regeln für Lobby Chat - Diese zu style.css hinzufügen */
+/* CSS Fixes für Chat-Display - Diese zu public/css/style.css hinzufügen/ersetzen */
 
-/* Current Game Lobby Layout mit Chat */
+/* Current Game Lobby Layout mit Chat - UPDATED */
 .current-game-container {
     display: grid;
     grid-template-columns: 2fr 1fr;
     gap: 2rem;
     min-height: 500px;
+    width: 100%;
 }
 
 .game-lobby-left {
     background: white;
     padding: 0;
     border-radius: 12px;
+    min-height: 500px;
 }
 
 .game-lobby-right {
@@ -1985,19 +1987,22 @@ input:focus, select:focus {
     box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     display: flex;
     flex-direction: column;
+    min-height: 500px;
 }
 
-/* Lobby Chat Styling */
+/* Lobby Chat Container - WICHTIG: Sichtbarkeit forcieren */
 .lobby-chat {
-    display: flex;
+    display: flex !important; /* Forciere Display */
     flex-direction: column;
     height: 100%;
     min-height: 450px;
     background: #f8f9fa;
     border-radius: 8px;
     overflow: hidden;
+    visibility: visible !important; /* Forciere Sichtbarkeit */
 }
 
+/* Chat Header für Lobby Chat */
 .lobby-chat .chat-header {
     display: flex;
     justify-content: space-between;
@@ -2006,18 +2011,22 @@ input:focus, select:focus {
     background: #28a745;
     color: white;
     border-radius: 8px 8px 0 0;
+    flex-shrink: 0;
 }
 
 .lobby-chat .chat-header h4 {
     margin: 0;
     font-size: 1.1rem;
+    color: white;
 }
 
 .lobby-chat .chat-info {
     font-size: 0.9rem;
     opacity: 0.9;
+    color: white;
 }
 
+/* Messages Container für Lobby Chat */
 .lobby-chat .chat-messages-container {
     flex: 1;
     display: flex;
@@ -2033,13 +2042,16 @@ input:focus, select:focus {
     min-height: 300px;
     max-height: 350px;
     scroll-behavior: smooth;
+    background: white;
 }
 
+/* Input Container für Lobby Chat */
 .lobby-chat .chat-input-container {
     padding: 1rem;
     background: #f8f9fa;
     border-top: 1px solid #dee2e6;
     border-radius: 0 0 8px 8px;
+    flex-shrink: 0;
 }
 
 .lobby-chat .chat-input-wrapper {
@@ -2059,6 +2071,7 @@ input:focus, select:focus {
     min-height: 40px;
     max-height: 100px;
     transition: border-color 0.3s ease;
+    background: white;
 }
 
 .lobby-chat .chat-input:focus {
@@ -2189,6 +2202,15 @@ input:focus, select:focus {
     font-weight: 500;
 }
 
+/* Debug: Rote Umrandung für Debugging */
+.lobby-chat.debug {
+    border: 3px solid red !important;
+}
+
+.lobby-chat .chat-messages.debug {
+    border: 2px solid blue !important;
+}
+
 /* Scrollbar für Lobby Chat */
 .lobby-chat .chat-messages::-webkit-scrollbar {
     width: 6px;
@@ -2208,7 +2230,7 @@ input:focus, select:focus {
     background: #a8a8a8;
 }
 
-/* Responsive Design für Lobby Chat */
+/* Responsive Design für Lobby Chat - UPDATED */
 @media (max-width: 1024px) {
     .current-game-container {
         grid-template-columns: 1fr;
@@ -2218,15 +2240,17 @@ input:focus, select:focus {
     .game-lobby-right {
         padding: 1rem;
         max-height: 400px;
+        min-height: 400px;
     }
     
     .lobby-chat {
         max-height: 400px;
+        min-height: 350px;
     }
     
     .lobby-chat .chat-messages {
         max-height: 250px;
-        min-height: 250px;
+        min-height: 200px;
     }
 }
 
@@ -2238,6 +2262,12 @@ input:focus, select:focus {
     .game-lobby-right {
         padding: 0.75rem;
         max-height: 350px;
+        min-height: 300px;
+    }
+    
+    .lobby-chat {
+        min-height: 250px;
+        max-height: 300px;
     }
     
     .lobby-chat .chat-header {
@@ -2246,8 +2276,8 @@ input:focus, select:focus {
     
     .lobby-chat .chat-messages {
         padding: 0.75rem;
-        max-height: 200px;
-        min-height: 200px;
+        max-height: 150px;
+        min-height: 120px;
     }
     
     .lobby-chat .chat-input-container {
@@ -2269,4 +2299,30 @@ input:focus, select:focus {
         height: 35px;
         font-size: 0.9rem;
     }
+}
+
+/* Zusätzliche Debug-Styles zum Testen */
+.lobby-chat * {
+    box-sizing: border-box;
+}
+
+/* Forciere Anzeige für alle Chat-Elemente */
+#lobbyChat {
+    display: block !important;
+    visibility: visible !important;
+}
+
+#lobbyChat .chat-messages-container {
+    display: flex !important;
+    flex-direction: column !important;
+}
+
+#lobbyChat .chat-messages {
+    display: block !important;
+    visibility: visible !important;
+}
+
+#lobbyChat .chat-input-container {
+    display: block !important;
+    visibility: visible !important;
 }

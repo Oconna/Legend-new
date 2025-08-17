@@ -39,6 +39,103 @@ class LobbyManager {
             console.log('Chat manager created');
         }
     }
+	
+    // Chat für normale Spiellobby initialisieren
+    initializeLobbyChat() {
+        console.log('Initializing lobby chat...');
+        
+        if (!this.chatManager) {
+            console.warn('ChatManager not available for lobby chat');
+            return false;
+        }
+        
+        if (!this.currentGameId || !this.playerName) {
+            console.warn('Missing gameId or playerName for lobby chat');
+            return false;
+        }
+        
+        // Verwende Memory Game ID für Lobby Chat
+        const chatInitialized = this.chatManager.init(this.socket, this.currentGameId, this.playerName);
+        
+        if (chatInitialized) {
+            console.log('Lobby chat initialized successfully');
+            
+            // Chat-Container anzeigen
+            const lobbyChatElement = document.getElementById('lobbyChat');
+            if (lobbyChatElement) {
+                lobbyChatElement.style.display = 'block';
+                console.log('Lobby chat element shown');
+                
+                // Setup character counter für Lobby Chat
+                this.setupLobbyChatCharacterCounter();
+                
+                // Join chat room on server
+                this.socket.emit('join_chat_room', {
+                    gameId: this.currentGameId, // Memory Game ID für Lobby
+                    playerName: this.playerName
+                });
+                
+                console.log(`Joined lobby chat room: ${this.currentGameId}`);
+                return true;
+            } else {
+                console.error('Lobby chat element not found in DOM');
+            }
+        } else {
+            console.error('Failed to initialize lobby chat');
+        }
+        
+        return false;
+    }
+
+    // Setup character counter für Lobby Chat Input
+    setupLobbyChatCharacterCounter() {
+        const lobbyChatInput = document.getElementById('lobbyChatMessageInput');
+        const lobbyCharCount = document.getElementById('lobbyChatCharCount');
+        
+        if (lobbyChatInput && lobbyCharCount) {
+            lobbyChatInput.addEventListener('input', () => {
+                const currentLength = lobbyChatInput.value.length;
+                const maxLength = 500;
+                
+                lobbyCharCount.textContent = currentLength;
+                
+                // Update character counter styling
+                lobbyCharCount.className = 'char-count';
+                if (currentLength > maxLength * 0.8) {
+                    lobbyCharCount.classList.add('warning');
+                }
+                if (currentLength > maxLength * 0.95) {
+                    lobbyCharCount.classList.remove('warning');
+                    lobbyCharCount.classList.add('danger');
+                }
+            });
+            
+            console.log('Lobby chat character counter setup complete');
+        } else {
+            console.warn('Lobby chat input or character counter not found');
+        }
+    }
+
+    // Chat für Lobby deaktivieren
+    deactivateLobbyChat() {
+        console.log('Deactivating lobby chat...');
+        
+        if (this.chatManager && this.currentGameId && this.playerName) {
+            // Leave chat room on server
+            this.socket.emit('leave_chat_room', {
+                gameId: this.currentGameId,
+                playerName: this.playerName
+            });
+        }
+        
+        // Hide chat element
+        const lobbyChatElement = document.getElementById('lobbyChat');
+        if (lobbyChatElement) {
+            lobbyChatElement.style.display = 'none';
+        }
+        
+        console.log('Lobby chat deactivated');
+    }
 
     // Setup character counter for chat input
     setupChatCharacterCounter() {
@@ -701,6 +798,12 @@ class LobbyManager {
         
         // Update players list
         this.updateCurrentGamePlayersList(data.players);
+        
+        // *** NEUE CHAT-INITIALISIERUNG ***
+        // Chat für normale Lobby initialisieren (mit Memory Game ID)
+        setTimeout(() => {
+            this.initializeLobbyChat();
+        }, 500); // Kurze Verzögerung um sicherzustellen dass DOM bereit ist
     }
 
     // Hide current game lobby
@@ -710,18 +813,8 @@ class LobbyManager {
             currentGameSection.style.display = 'none';
         }
         
-        // Cleanup chat
-        if (this.chatManager) {
-            // Leave chat room on server
-            if (this.gameDbId && this.playerName) {
-                this.socket.emit('leave_chat_room', {
-                    gameId: this.gameDbId,
-                    playerName: this.playerName
-                });
-            }
-            this.chatManager.destroy();
-            this.chatManager = null;
-        }
+        // *** CHAT DEAKTIVIEREN ***
+        this.deactivateLobbyChat();
         
         this.currentGameId = null;
         this.isReady = false;

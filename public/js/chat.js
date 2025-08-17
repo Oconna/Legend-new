@@ -23,43 +23,91 @@ class ChatManager {
 
     // Initialize chat system
     init(socket, gameId, playerName) {
+        console.log('ChatManager.init called with:', { gameId, playerName, socketConnected: socket?.connected });
+        
+        // Cleanup existing chat if reinitializing
+        if (this.isInitialized) {
+            console.log('Chat already initialized, cleaning up first...');
+            this.destroy();
+        }
+        
         this.socket = socket;
         this.gameId = gameId;
         this.playerName = playerName;
         
         if (!this.socket || !this.gameId || !this.playerName) {
-            console.warn('Chat initialization failed: missing required parameters');
+            console.error('Chat initialization failed: missing required parameters', {
+                hasSocket: !!this.socket,
+                hasGameId: !!this.gameId,
+                hasPlayerName: !!this.playerName
+            });
             return false;
         }
         
-        this.setupChatElements();
-        this.setupEventListeners();
+        // Bestimme Chat-Container basierend auf Kontext
+        const isLobbyChat = this.determineChatContext();
+        console.log('Chat context determined:', isLobbyChat ? 'lobby' : 'race_selection');
+        
+        this.setupChatElements(isLobbyChat);
+        this.setupEventListeners(isLobbyChat);
         this.setupSocketEvents();
+        
         this.isInitialized = true;
         
-        console.log(`Chat initialized for player ${this.playerName} in game ${this.gameId}`);
+        console.log(`Chat initialized successfully for player ${this.playerName} in game ${this.gameId}`);
         return true;
+    }
+	
+	determineChatContext() {
+        // Prüfe ob Race Selection Modal offen ist
+        const raceModal = document.getElementById('raceSelectionModal');
+        const isRaceModalOpen = raceModal && raceModal.style.display === 'block';
+        
+        // Prüfe ob Lobby Section sichtbar ist
+        const lobbySection = document.getElementById('currentGameSection');
+        const isLobbyVisible = lobbySection && lobbySection.style.display !== 'none';
+        
+        console.log('Chat context check:', { isRaceModalOpen, isLobbyVisible });
+        
+        // Race Selection hat Priorität
+        return !isRaceModalOpen && isLobbyVisible;
     }
 
     // Setup chat HTML elements
-    setupChatElements() {
-        this.chatContainer = document.getElementById('raceSelectionChat');
-        this.messagesContainer = document.getElementById('chatMessages');
-        this.messageInput = document.getElementById('chatMessageInput');
-        this.sendButton = document.getElementById('chatSendButton');
-        this.playerCountElement = document.getElementById('chatPlayerCount');
+    setupChatElements(isLobbyChat = false) {
+        if (isLobbyChat) {
+            // Lobby Chat Elements
+            this.chatContainer = document.getElementById('lobbyChat');
+            this.messagesContainer = document.getElementById('lobbyChatMessages');
+            this.messageInput = document.getElementById('lobbyChatMessageInput');
+            this.sendButton = document.getElementById('lobbyChatSendButton');
+            this.playerCountElement = document.getElementById('lobbyChatPlayerCount');
+            
+            console.log('Setting up lobby chat elements');
+        } else {
+            // Race Selection Chat Elements
+            this.chatContainer = document.getElementById('raceSelectionChat');
+            this.messagesContainer = document.getElementById('chatMessages');
+            this.messageInput = document.getElementById('chatMessageInput');
+            this.sendButton = document.getElementById('chatSendButton');
+            this.playerCountElement = document.getElementById('chatPlayerCount');
+            
+            console.log('Setting up race selection chat elements');
+        }
         
         if (!this.chatContainer) {
-            console.error('Chat container not found in DOM');
+            console.error('Chat container not found in DOM for context:', isLobbyChat ? 'lobby' : 'race_selection');
             return;
         }
         
         // Show chat container
         this.chatContainer.style.display = 'block';
+        console.log('Chat container shown');
         
         // Clear any existing messages
         if (this.messagesContainer) {
             this.messagesContainer.innerHTML = '';
+            console.log('Messages container cleared');
         }
         
         // Add welcome message
@@ -67,26 +115,39 @@ class ChatManager {
     }
 
     // Setup event listeners for chat interactions
-    setupEventListeners() {
-        if (!this.messageInput || !this.sendButton) return;
+    setupEventListeners(isLobbyChat = false) {
+        if (!this.messageInput || !this.sendButton) {
+            console.error('Chat input elements not found');
+            return;
+        }
         
-        // Send message on button click
-        this.sendButton.addEventListener('click', () => {
-            this.sendMessage();
-        });
+        console.log('Setting up chat event listeners for context:', isLobbyChat ? 'lobby' : 'race_selection');
         
-        // Send message on Enter key
-        this.messageInput.addEventListener('keypress', (e) => {
+        // Remove existing listeners to prevent duplicates
+        this.messageInput.removeEventListener('keypress', this.keypressHandler);
+        this.sendButton.removeEventListener('click', this.clickHandler);
+        this.messageInput.removeEventListener('input', this.inputHandler);
+        
+        // Create bound handlers to maintain context
+        this.keypressHandler = (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 this.sendMessage();
             }
-        });
+        };
         
-        // Auto-resize textarea
-        this.messageInput.addEventListener('input', () => {
+        this.clickHandler = () => {
+            this.sendMessage();
+        };
+        
+        this.inputHandler = () => {
             this.adjustTextareaHeight();
-        });
+        };
+        
+        // Add event listeners
+        this.sendButton.addEventListener('click', this.clickHandler);
+        this.messageInput.addEventListener('keypress', this.keypressHandler);
+        this.messageInput.addEventListener('input', this.inputHandler);
         
         // Handle scroll events for auto-scroll detection
         if (this.messagesContainer) {
@@ -96,7 +157,13 @@ class ChatManager {
         }
         
         // Focus input when chat is opened
-        this.messageInput.focus();
+        setTimeout(() => {
+            if (this.messageInput) {
+                this.messageInput.focus();
+            }
+        }, 100);
+        
+        console.log('Chat event listeners setup complete');
     }
 
     // Setup socket event listeners for chat
@@ -325,10 +392,36 @@ class ChatManager {
         }
     }
 
+    // UPDATED: hide Methode - verstecke alle Chat-Container
     hide() {
-        if (this.chatContainer) {
-            this.chatContainer.style.display = 'none';
-        }
+        // Hide all possible chat containers
+        const containers = [
+            document.getElementById('lobbyChat'),
+            document.getElementById('raceSelectionChat')
+        ];
+        
+        containers.forEach(container => {
+            if (container) {
+                container.style.display = 'none';
+            }
+        });
+    }
+	
+	// DEBUG: Methode zum Anzeigen des Chat-Status
+    getDebugInfo() {
+        return {
+            isInitialized: this.isInitialized,
+            gameId: this.gameId,
+            playerName: this.playerName,
+            hasSocket: !!this.socket,
+            socketConnected: this.socket?.connected,
+            hasChatContainer: !!this.chatContainer,
+            hasMessagesContainer: !!this.messagesContainer,
+            hasMessageInput: !!this.messageInput,
+            hasSendButton: !!this.sendButton,
+            messageCount: this.messages.length,
+            chatContainerVisible: this.chatContainer?.style.display !== 'none'
+        };
     }
 
     // Clear chat messages
@@ -341,6 +434,9 @@ class ChatManager {
 
     // Cleanup chat system
     destroy() {
+        console.log('Destroying chat system...');
+        
+        // Remove socket listeners
         if (this.socket) {
             this.socket.off('chat_message');
             this.socket.off('chat_player_joined');
@@ -349,11 +445,52 @@ class ChatManager {
             this.socket.off('chat_player_count');
         }
         
+        // Remove DOM event listeners
+        if (this.messageInput && this.keypressHandler) {
+            this.messageInput.removeEventListener('keypress', this.keypressHandler);
+            this.messageInput.removeEventListener('input', this.inputHandler);
+        }
+        
+        if (this.sendButton && this.clickHandler) {
+            this.sendButton.removeEventListener('click', this.clickHandler);
+        }
+        
+        // Clear references
+        this.keypressHandler = null;
+        this.clickHandler = null;
+        this.inputHandler = null;
+        
         this.isInitialized = false;
         this.clear();
         this.hide();
         
-        console.log('Chat system destroyed');
+        // Reset properties
+        this.chatContainer = null;
+        this.messagesContainer = null;
+        this.messageInput = null;
+        this.sendButton = null;
+        this.playerCountElement = null;
+        
+        console.log('Chat system destroyed completely');
+    }
+	
+	// NEUE Methode: Switch zwischen Chat-Kontexten
+    switchContext(isLobbyChat) {
+        console.log('Switching chat context to:', isLobbyChat ? 'lobby' : 'race_selection');
+        
+        if (!this.isInitialized) {
+            console.warn('Chat not initialized, cannot switch context');
+            return false;
+        }
+        
+        // Hide current context
+        this.hide();
+        
+        // Setup new context
+        this.setupChatElements(isLobbyChat);
+        this.setupEventListeners(isLobbyChat);
+        
+        return true;
     }
 
     // Get chat statistics

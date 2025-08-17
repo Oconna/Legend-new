@@ -1460,4 +1460,17 @@ server.listen(PORT, () => {
                     wasConfirmed: result.wasConfirmed
                 });
                 
-                socket.emit
+                socket.emit('race_deselection_confirmed', {
+                    message: 'Rassenauswahl zurückgesetzt'
+                });
+
+                // Broadcast updated race selection sync
+                await broadcastRaceSelectionSync(data.gameId);
+            } else {
+                socket.emit('error', result.message);
+            }
+        } catch (error) {
+            console.error('Error in deselect_race:', error);
+            socket.emit('error', 'Fehler bei der Rassenabwahl');
+        }
+    });

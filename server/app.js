@@ -217,6 +217,57 @@ io.on('connection', (socket) => {
             await broadcastRaceSelectionSync(data.gameId);
             
         } catch (error) {
+            console.error('Error rejoining DB game room:', error);
+            socket.emit('error', 'Fehler beim Wiederverbinden');
+        }
+    });
+
+    // NEW: Request race selection sync
+    socket.on('request_race_selection_sync', async (data) => {
+        try {
+            console.log(`Race selection sync requested by ${data.playerName} for game ${data.gameId}`);
+            
+            const result = await gameController.getAllRaceSelections(data.gameId);
+            if (result.success) {
+                socket.emit('race_selection_sync', {
+                    gameId: data.gameId,
+                    selections: result.selections,
+                    timestamp: new Date().toISOString()
+                });
+            }
+        } catch (error) {
+            console.error('Error sending race selection sync:', error);
+            socket.emit('error', 'Fehler beim Synchronisieren der Rassenwahlen');
+        }
+    });
+
+    // Lobby Events (Memory-based)
+    socket.on('create_game', (data) => {
+        try {
+            console.log('Create game request:', data);
+            const result = improvedLobbyManager.createGame(
+                socket.id, 
+                data.playerName, 
+                data.gameName, 
+                data.maxPlayers, 
+                data.mapSize
+            );
+            
+            if (result.success) {
+                socket.join(`game_${result.gameId}`);
+                socket.emit('game_created', result);
+                
+                // Send updated player list to game room
+                io.to(`game_${result.gameId}`).emit('lobby_players_updated', result.players);
+                
+                // Update games list for everyone immediately
+                io.emit('games_updated', improvedLobbyManager.getAvailableGames());
+                
+                console.log(`Game created: ${data.gameName}, broadcasting to all clients`);
+            } else {
+                socket.emit('error', result.message);
+            }
+        } catch (error) {
             console.error('Error in create_game:', error);
             socket.emit('error', 'Fehler beim Erstellen des Spiels: ' + error.message);
         }
@@ -625,6 +676,88 @@ io.on('connection', (socket) => {
         }
     });
 
+    // Admin/Debug Events
+    socket.on('admin_get_game_stats', async (data) => {
+        try {
+            if (!data.gameId) {
+                socket.emit('error', 'Game ID required');
+                return;
+            }
+
+            const result = await gameController.getGameStatistics(data.gameId);
+            if (result.success) {
+                socket.emit('admin_game_stats', {
+                    gameId: data.gameId,
+                    stats: result.statistics,
+                    timestamp: new Date().toISOString()
+                });
+            } else {
+                socket.emit('error', result.message);
+            }
+        } catch (error) {
+            console.error('Error getting admin game stats:', error);
+            socket.emit('error', 'Fehler beim Abrufen der Spielstatistiken');
+        }
+    });
+
+    socket.on('admin_reset_race_selections', async (data) => {
+        try {
+            if (!data.gameId) {
+                socket.emit('error', 'Game ID required');
+                return;
+            }
+
+            console.log(`Admin resetting race selections for game ${data.gameId}`);
+            const result = await gameController.resetAllRaceSelections(data.gameId);
+            
+            if (result.success) {
+                // Broadcast reset to all players in the game
+                io.to(`db_game_${data.gameId}`).emit('race_selections_reset', {
+                    message: 'Alle Rassenwahlen wurden zurückgesetzt'
+                });
+                
+                // Send updated sync
+                await broadcastRaceSelectionSync(data.gameId);
+                
+                socket.emit('admin_action_success', {
+                    action: 'reset_race_selections',
+                    gameId: data.gameId,
+                    message: 'Race selections reset successfully'
+                });
+            } else {
+                socket.emit('error', result.message);
+            }
+        } catch (error) {
+            console.error('Error in admin reset race selections:', error);
+            socket.emit('error', 'Fehler beim Zurücksetzen der Rassenwahlen');
+        }
+    });
+
+    socket.on('admin_validate_race_integrity', async (data) => {
+        try {
+            if (!data.gameId) {
+                socket.emit('error', 'Game ID required');
+                return;
+            }
+
+            const result = await gameController.validateRaceSelectionIntegrity(data.gameId);
+            if (result.success) {
+                socket.emit('admin_race_integrity', {
+                    gameId: data.gameId,
+                    isValid: result.isValid,
+                    issues: result.issues,
+                    players: result.players,
+                    timestamp: new Date().toISOString()
+                });
+            } else {
+                socket.emit('error', result.message);
+            }
+        } catch (error) {
+            console.error('Error validating race integrity:', error);
+            socket.emit('error', 'Fehler bei der Integritätsprüfung');
+        }
+    });
+
     // Disconnect
     socket.on('disconnect', (reason) => {
         console.log(`Spieler getrennt: ${socket.id}, Grund: ${reason}`);
@@ -700,10 +833,207 @@ setInterval(() => {
     }
 }, 60000); // Every minute
 
+// Health check endpoint
+app.get('/health', async (req, res) => {
+    try {
+        const dbCheck = await db.query('SELECT 1');
+        const timestamp = new Date().toISOString();
+        
+        res.json({
+            status: 'healthy',
+            timestamp: timestamp,
+            database: 'connected',
+            uptime: process.uptime(),
+            memory: process.memoryUsage(),
+            activeConnections: io.engine.clientsCount,
+            memoryGames: improvedLobbyManager.games.size,
+            memoryPlayers: improvedLobbyManager.players.size,
+            dbGames: dbGamePlayers.size,
+            version: require('../package.json').version
+        });
+    } catch (error) {
+        res.status(500).json({
+            status: 'unhealthy',
+            error: error.message,
+            timestamp: new Date().toISOString()
+        });
+    }
+});
+
+// Debug endpoints (only in development)
+if (process.env.NODE_ENV === 'development') {
+    app.get('/debug/memory-games', (req, res) => {
+        const games = Array.from(improvedLobbyManager.games.entries()).map(([id, game]) => ({
+            id: id,
+            name: game.name,
+            players: Array.from(game.players.values()).map(p => p.name),
+            status: game.status,
+            createdAt: game.createdAt
+        }));
+        
+        res.json({
+            totalGames: games.length,
+            games: games,
+            timestamp: new Date().toISOString()
+        });
+    });
+
+    app.get('/debug/db-games', (req, res) => {
+        const games = Array.from(dbGamePlayers.entries()).map(([gameId, playerSet]) => ({
+            gameId: gameId,
+            playerCount: playerSet.size,
+            socketIds: Array.from(playerSet)
+        }));
+        
+        res.json({
+            totalDbGames: games.length,
+            games: games,
+            timestamp: new Date().toISOString()
+        });
+    });
+
+    app.get('/debug/socket-rooms', (req, res) => {
+        const rooms = [];
+        for (const [roomName, room] of io.sockets.adapter.rooms) {
+            if (!roomName.startsWith('socket.io#')) {
+                rooms.push({
+                    name: roomName,
+                    playerCount: room.size,
+                    socketIds: Array.from(room)
+                });
+            }
+        }
+        
+        res.json({
+            totalRooms: rooms.length,
+            rooms: rooms,
+            timestamp: new Date().toISOString()
+        });
+    });
+
+    app.post('/debug/broadcast-test/:gameId', async (req, res) => {
+        try {
+            const gameId = parseInt(req.params.gameId);
+            const message = req.body.message || 'Test broadcast message';
+            
+            io.to(`db_game_${gameId}`).emit('debug_broadcast', {
+                message: message,
+                timestamp: new Date().toISOString(),
+                gameId: gameId
+            });
+            
+            res.json({
+                success: true,
+                message: `Broadcast sent to game ${gameId}`,
+                roomName: `db_game_${gameId}`
+            });
+        } catch (error) {
+            res.status(500).json({
+                success: false,
+                error: error.message
+            });
+        }
+    });
+
+    app.post('/debug/force-sync/:gameId', async (req, res) => {
+        try {
+            const gameId = parseInt(req.params.gameId);
+            await broadcastRaceSelectionSync(gameId);
+            
+            res.json({
+                success: true,
+                message: `Race selection sync forced for game ${gameId}`
+            });
+        } catch (error) {
+            res.status(500).json({
+                success: false,
+                error: error.message
+            });
+        }
+    });
+}
+
+// Graceful shutdown handling
+process.on('SIGTERM', () => {
+    console.log('SIGTERM received, shutting down gracefully...');
+    
+    // Close server
+    server.close(() => {
+        console.log('HTTP server closed');
+        
+        // Close database connections
+        if (db && db.pool) {
+            db.pool.end(() => {
+                console.log('Database pool closed');
+                process.exit(0);
+            });
+        } else {
+            process.exit(0);
+        }
+    });
+
+    // Force close after 30 seconds
+    setTimeout(() => {
+        console.error('Could not close connections in time, forcefully shutting down');
+        process.exit(1);
+    }, 30000);
+});
+
+process.on('SIGINT', () => {
+    console.log('SIGINT received, shutting down gracefully...');
+    
+    // Notify all connected clients about shutdown
+    io.emit('server_shutdown', {
+        message: 'Server wird heruntergefahren. Bitte speichere deinen Fortschritt.',
+        timestamp: new Date().toISOString()
+    });
+    
+    // Give clients time to receive the message
+    setTimeout(() => {
+        server.close(() => {
+            console.log('HTTP server closed');
+            process.exit(0);
+        });
+    }, 2000);
+});
+
 // Error Handling
 app.use((err, req, res, next) => {
-    console.error(err.stack);
-    res.status(500).json({ error: 'Interner Serverfehler' });
+    console.error('Express error:', err.stack);
+    res.status(500).json({ 
+        error: 'Interner Serverfehler',
+        timestamp: new Date().toISOString(),
+        requestId: req.headers['x-request-id'] || 'unknown'
+    });
+});
+
+// 404 Handler
+app.use((req, res) => {
+    res.status(404).json({
+        error: 'Route nicht gefunden',
+        path: req.path,
+        method: req.method,
+        timestamp: new Date().toISOString()
+    });
+});
+
+// Global error handlers
+process.on('uncaughtException', (error) => {
+    console.error('Uncaught Exception:', error);
+    // In production, you might want to restart the process
+    if (process.env.NODE_ENV === 'production') {
+        console.error('Uncaught exception in production, exiting...');
+        process.exit(1);
+    }
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+    // In production, you might want to restart the process
+    if (process.env.NODE_ENV === 'production') {
+        console.error('Unhandled rejection in production, exiting...');
+        process.exit(1);
+    }
 });
 
 // Start Server
@@ -714,55 +1044,16 @@ server.listen(PORT, () => {
     console.log(`💾 Memory-basierte Lobby aktiviert`);
     console.log(`🎯 Datenbank für persistente Spiele bereit`);
     console.log(`🔄 Erweiterte Socket.IO-Konfiguration aktiv`);
-});Error rejoining DB game room:', error);
-            socket.emit('error', 'Fehler beim Wiederverbinden');
-        }
-    });
-
-    // NEW: Request race selection sync
-    socket.on('request_race_selection_sync', async (data) => {
-        try {
-            console.log(`Race selection sync requested by ${data.playerName} for game ${data.gameId}`);
-            
-            const result = await gameController.getAllRaceSelections(data.gameId);
-            if (result.success) {
-                socket.emit('race_selection_sync', {
-                    gameId: data.gameId,
-                    selections: result.selections,
-                    timestamp: new Date().toISOString()
-                });
-            }
-        } catch (error) {
-            console.error('Error sending race selection sync:', error);
-            socket.emit('error', 'Fehler beim Synchronisieren der Rassenwahlen');
-        }
-    });
-
-    // Lobby Events (Memory-based)
-    socket.on('create_game', (data) => {
-        try {
-            console.log('Create game request:', data);
-            const result = improvedLobbyManager.createGame(
-                socket.id, 
-                data.playerName, 
-                data.gameName, 
-                data.maxPlayers, 
-                data.mapSize
-            );
-            
-            if (result.success) {
-                socket.join(`game_${result.gameId}`);
-                socket.emit('game_created', result);
-                
-                // Send updated player list to game room
-                io.to(`game_${result.gameId}`).emit('lobby_players_updated', result.players);
-                
-                // Update games list for everyone immediately
-                io.emit('games_updated', improvedLobbyManager.getAvailableGames());
-                
-                console.log(`Game created: ${data.gameName}, broadcasting to all clients`);
-            } else {
-                socket.emit('error', result.message);
-            }
-        } catch (error) {
-            console.error('
+    console.log(`⚡ Heartbeat-System aktiviert`);
+    console.log(`🔧 Debug-Endpoints verfügbar: ${process.env.NODE_ENV === 'development'}`);
+    console.log(`🏥 Health-Check verfügbar unter: /health`);
+    
+    if (process.env.NODE_ENV === 'development') {
+        console.log(`🐛 Debug-Endpoints:`);
+        console.log(`   - GET /debug/memory-games`);
+        console.log(`   - GET /debug/db-games`);
+        console.log(`   - GET /debug/socket-rooms`);
+        console.log(`   - POST /debug/broadcast-test/:gameId`);
+        console.log(`   - POST /debug/force-sync/:gameId`);
+    }
+});

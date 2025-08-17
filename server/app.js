@@ -6,7 +6,7 @@ const path = require('path');
 require('dotenv').config();
 
 // Import improved lobby manager
-const improvedLobbyManager = require('./controllers/lobbyController');
+const improvedLobbyManager = require('./controllers/improvedLobbyManager');
 const gameController = require('./controllers/gameController');
 
 // Import database (only for persistent games)
@@ -106,8 +106,13 @@ app.get('/api/races', async (req, res) => {
 io.on('connection', (socket) => {
     console.log(`Neuer Spieler verbunden: ${socket.id}`);
 
-    // Send current games list immediately
+    // Send initial games list and setup periodic updates
     socket.emit('games_updated', improvedLobbyManager.getAvailableGames());
+    
+    // Send game list updates every 5 seconds to ensure sync
+    const gameListInterval = setInterval(() => {
+        socket.emit('games_updated', improvedLobbyManager.getAvailableGames());
+    }, 5000);
 
     // Lobby Events (Memory-based)
     socket.on('create_game', (data) => {
@@ -128,8 +133,10 @@ io.on('connection', (socket) => {
                 // Send updated player list to game room
                 io.to(`game_${result.gameId}`).emit('lobby_players_updated', result.players);
                 
-                // Update games list for everyone
+                // Update games list for everyone immediately
                 io.emit('games_updated', improvedLobbyManager.getAvailableGames());
+                
+                console.log(`Game created: ${data.gameName}, broadcasting to all clients`);
             } else {
                 socket.emit('error', result.message);
             }
@@ -156,8 +163,10 @@ io.on('connection', (socket) => {
                 // Send updated player list to game room
                 io.to(`game_${result.gameId}`).emit('lobby_players_updated', result.players);
                 
-                // Update games list for everyone
+                // Update games list for everyone immediately
                 io.emit('games_updated', improvedLobbyManager.getAvailableGames());
+                
+                console.log(`Player ${data.playerName} joined game, broadcasting to all clients`);
             } else {
                 socket.emit('error', result.message);
             }
@@ -301,6 +310,11 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => {
         console.log(`Spieler getrennt: ${socket.id}`);
         
+        // Clear interval
+        if (gameListInterval) {
+            clearInterval(gameListInterval);
+        }
+        
         try {
             const result = improvedLobbyManager.handleDisconnect(socket.id);
             
@@ -320,7 +334,7 @@ io.on('connection', (socket) => {
                 }
             }
             
-            // Update games list
+            // Update games list for everyone
             io.emit('games_updated', improvedLobbyManager.getAvailableGames());
             
         } catch (error) {

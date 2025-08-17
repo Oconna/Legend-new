@@ -22,52 +22,55 @@
                 </div>
             </section>
 
-            <!-- Game Creation Section -->
-            <section class="create-game-section">
-                <h2>Neues Spiel erstellen</h2>
-                <div class="game-form">
-                    <div class="form-group">
-                        <label for="gameName">Spielname:</label>
-                        <input type="text" id="gameName" placeholder="Mein Strategiespiel" maxlength="50">
+            <!-- Lobby Sections Grid -->
+            <div class="lobby-sections">
+                <!-- Game Creation Section -->
+                <section class="create-game-section">
+                    <h2>Neues Spiel erstellen</h2>
+                    <div class="game-form">
+                        <div class="form-group">
+                            <label for="gameName">Spielname:</label>
+                            <input type="text" id="gameName" placeholder="Mein Strategiespiel" maxlength="50">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="maxPlayers">Spieler (2-8):</label>
+                            <select id="maxPlayers">
+                                <option value="2">2 Spieler</option>
+                                <option value="3">3 Spieler</option>
+                                <option value="4" selected>4 Spieler</option>
+                                <option value="5">5 Spieler</option>
+                                <option value="6">6 Spieler</option>
+                                <option value="7">7 Spieler</option>
+                                <option value="8">8 Spieler</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="mapSize">Kartengröße:</label>
+                            <select id="mapSize">
+                                <option value="20">Klein (20x20)</option>
+                                <option value="30" selected>Mittel (30x30)</option>
+                                <option value="50">Groß (50x50)</option>
+                                <option value="100">Riesig (100x100)</option>
+                            </select>
+                        </div>
+                        
+                        <button id="createGameBtn" class="btn btn-primary">Spiel erstellen</button>
                     </div>
-                    
-                    <div class="form-group">
-                        <label for="maxPlayers">Spieler (2-8):</label>
-                        <select id="maxPlayers">
-                            <option value="2">2 Spieler</option>
-                            <option value="3">3 Spieler</option>
-                            <option value="4" selected>4 Spieler</option>
-                            <option value="5">5 Spieler</option>
-                            <option value="6">6 Spieler</option>
-                            <option value="7">7 Spieler</option>
-                            <option value="8">8 Spieler</option>
-                        </select>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="mapSize">Kartengröße:</label>
-                        <select id="mapSize">
-                            <option value="20">Klein (20x20)</option>
-                            <option value="30" selected>Mittel (30x30)</option>
-                            <option value="50">Groß (50x50)</option>
-                            <option value="100">Riesig (100x100)</option>
-                        </select>
-                    </div>
-                    
-                    <button id="createGameBtn" class="btn btn-primary">Spiel erstellen</button>
-                </div>
-            </section>
+                </section>
 
-            <!-- Available Games Section -->
-            <section class="games-section">
-                <h2>Verfügbare Spiele</h2>
-                <div class="games-container">
-                    <div id="gamesList" class="games-list">
-                        <div class="loading">Lade Spiele...</div>
+                <!-- Available Games Section -->
+                <section class="games-section">
+                    <h2>Verfügbare Spiele</h2>
+                    <div class="games-container">
+                        <div id="gamesList" class="games-list">
+                            <div class="loading">Lade Spiele...</div>
+                        </div>
                     </div>
-                </div>
-                <button id="refreshGamesBtn" class="btn btn-secondary">Spiele aktualisieren</button>
-            </section>
+                    <button id="refreshGamesBtn" class="btn btn-secondary">Spiele aktualisieren</button>
+                </section>
+            </div>
 
             <!-- Current Game Lobby Section (shown when in a game) -->
             <section id="currentGameSection" class="current-game-section" style="display: none;">
@@ -102,43 +105,9 @@
             </section>
         </main>
 
-        <!-- Game Lobby Modal -->
-        <div id="gameLobbyModal" class="modal">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h3 id="modalGameName">Spiel Lobby</h3>
-                    <span class="close">&times;</span>
-                </div>
-                <div class="modal-body">
-                    <div class="lobby-info">
-                        <div class="game-details">
-                            <p><strong>Spieler:</strong> <span id="modalPlayerCount">0</span>/<span id="modalMaxPlayers">0</span></p>
-                            <p><strong>Kartengröße:</strong> <span id="modalMapSize">0</span>x<span id="modalMapSizeY">0</span></p>
-                        </div>
-                        
-                        <div class="players-list">
-                            <h4>Spieler in der Lobby:</h4>
-                            <ul id="modalPlayersList">
-                                <!-- Player list will be populated here -->
-                            </ul>
-                        </div>
-                        
-                        <div class="lobby-actions">
-                            <button id="readyBtn" class="btn btn-success">Bereit</button>
-                            <button id="startGameBtn" class="btn btn-primary" style="display: none;">Spiel starten</button>
-                            <button id="leaveLobbyBtn" class="btn btn-danger">Lobby verlassen</button>
-                        </div>
-                        
-                        <div class="lobby-status">
-                            <p id="lobbyStatusText">Warte auf andere Spieler...</p>
-                            <p id="readyStatusText">Bereit: <span id="readyCount">0</span>/<span id="totalPlayers">0</span></p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Race Selection Modal -->
+        <!-- Game Lobby Modal - REMOVE THIS -->
+        <!-- Race Selection Modal - KEEP THIS -->
+        <div id="raceSelectionModal" class="modal">
         <div id="raceSelectionModal" class="modal">
             <div class="modal-content">
                 <div class="modal-header">

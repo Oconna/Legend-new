@@ -217,7 +217,12 @@ class LobbyManager {
         });
 
         this.socket.on('games_updated', (games) => {
+            console.log('Games list updated:', games);
             this.updateGamesList(games);
+        });
+
+        this.socket.on('player_ready_notification', (data) => {
+            showNotification(`${data.playerName} ist ${data.ready ? 'bereit' : 'nicht bereit'}`, 'info');
         });
 
         this.socket.on('player_joined', (data) => {
@@ -246,7 +251,8 @@ class LobbyManager {
         });
 
         this.socket.on('start_race_selection', (data) => {
-            hideModal('gameLobbyModal');
+            hideModal('raceSelectionModal'); // This will be shown later
+            this.hideCurrentGameLobby();
             this.startRaceSelection();
         });
 

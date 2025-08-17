@@ -156,7 +156,7 @@ class ImprovedLobbyManager {
 
             // Check if all players are ready
             const playersArray = Array.from(game.players.values());
-            const allReady = playersArray.length > 1 && playersArray.every(p => p.isReady);
+            const allReady = playersArray.length >= 2 && playersArray.every(p => p.isReady);
             const readyCount = playersArray.filter(p => p.isReady).length;
 
             console.log(`Player ${gamePlayer.name} is ${ready ? 'ready' : 'not ready'} in game ${game.name}`);

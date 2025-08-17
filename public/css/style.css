@@ -162,21 +162,25 @@ input:focus, select:focus {
     box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
 }
 
-/* Lobby Sections */
+/* Lobby Layout Update */
 .lobby-main {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
+    display: flex;
+    flex-direction: column;
     gap: 2rem;
     margin-top: 2rem;
 }
 
 .player-section {
-    grid-column: 1 / -1;
     background: white;
     padding: 1.5rem;
     border-radius: 12px;
     box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-    margin-bottom: 1rem;
+}
+
+.lobby-sections {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
 }
 
 .create-game-section, .games-section {

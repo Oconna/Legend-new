@@ -19,13 +19,21 @@ const io = socketIo(server, {
     cors: {
         origin: "*",
         methods: ["GET", "POST"]
-    }
+    },
+    // Enhanced Socket.IO server configuration
+    pingTimeout: 60000,
+    pingInterval: 25000,
+    transports: ['websocket', 'polling'],
+    allowEIO3: true
 });
 
 // Middleware
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '../public')));
+
+// In-memory storage for active DB game players
+const dbGamePlayers = new Map(); // gameId -> Set of socketIds
 
 // Routes
 app.get('/', (req, res) => {
@@ -49,6 +57,7 @@ app.get('/api/test', async (req, res) => {
             racesCount: races[0].count,
             memoryGames: improvedLobbyManager.games.size,
             memoryPlayers: improvedLobbyManager.players.size,
+            dbGamePlayers: dbGamePlayers.size,
             timestamp: new Date().toISOString()
         });
     } catch (error) {
@@ -149,6 +158,23 @@ app.get('/api/game/:gameId/status', async (req, res) => {
     }
 });
 
+// Helper function to broadcast race selection sync to all players in a game
+async function broadcastRaceSelectionSync(gameId) {
+    try {
+        const result = await gameController.getAllRaceSelections(gameId);
+        if (result.success) {
+            io.to(`db_game_${gameId}`).emit('race_selection_sync', {
+                gameId: gameId,
+                selections: result.selections,
+                timestamp: new Date().toISOString()
+            });
+            console.log(`✓ Race selection sync broadcasted for game ${gameId}`);
+        }
+    } catch (error) {
+        console.error('Error broadcasting race selection sync:', error);
+    }
+}
+
 // Socket.IO Connection Handling
 io.on('connection', (socket) => {
     console.log(`Neuer Spieler verbunden: ${socket.id}`);
@@ -156,37 +182,40 @@ io.on('connection', (socket) => {
     // Send initial games list and setup periodic updates
     socket.emit('games_updated', improvedLobbyManager.getAvailableGames());
     
-    // Send game list updates every 5 seconds to ensure sync
+    // Send game list updates every 30 seconds to ensure sync
     const gameListInterval = setInterval(() => {
         socket.emit('games_updated', improvedLobbyManager.getAvailableGames());
-    }, 5000);
+    }, 30000);
 
-    // Lobby Events (Memory-based)
-    socket.on('create_game', (data) => {
+    // NEW: Heartbeat handling
+    socket.on('heartbeat', (data) => {
+        socket.emit('heartbeat_response', {
+            timestamp: Date.now(),
+            playerName: data.playerName,
+            gameDbId: data.gameDbId
+        });
+        
+        // Update last seen time for this player
+        socket.lastSeen = Date.now();
+    });
+
+    // NEW: Rejoin DB game room after reconnection
+    socket.on('rejoin_db_game_room', async (data) => {
         try {
-            console.log('Create game request:', data);
-            const result = improvedLobbyManager.createGame(
-                socket.id, 
-                data.playerName, 
-                data.gameName, 
-                data.maxPlayers, 
-                data.mapSize
-            );
+            console.log(`Player ${data.playerName} rejoining DB game room ${data.gameId}`);
             
-            if (result.success) {
-                socket.join(`game_${result.gameId}`);
-                socket.emit('game_created', result);
-                
-                // Send updated player list to game room
-                io.to(`game_${result.gameId}`).emit('lobby_players_updated', result.players);
-                
-                // Update games list for everyone immediately
-                io.emit('games_updated', improvedLobbyManager.getAvailableGames());
-                
-                console.log(`Game created: ${data.gameName}, broadcasting to all clients`);
-            } else {
-                socket.emit('error', result.message);
+            // Join the room
+            socket.join(`db_game_${data.gameId}`);
+            
+            // Add to tracking
+            if (!dbGamePlayers.has(data.gameId)) {
+                dbGamePlayers.set(data.gameId, new Set());
             }
+            dbGamePlayers.get(data.gameId).add(socket.id);
+            
+            // Send current race selection status
+            await broadcastRaceSelectionSync(data.gameId);
+            
         } catch (error) {
             console.error('Error in create_game:', error);
             socket.emit('error', 'Fehler beim Erstellen des Spiels: ' + error.message);
@@ -268,11 +297,17 @@ io.on('connection', (socket) => {
                     if (memoryGame) {
                         console.log(`📋 Moving ${memoryGame.players.size} players to DB game room`);
                         
+                        // Initialize tracking for this DB game
+                        dbGamePlayers.set(result.dbGameId, new Set());
+                        
                         for (const [socketId, player] of memoryGame.players) {
                             const playerSocket = io.sockets.sockets.get(socketId);
                             if (playerSocket) {
                                 playerSocket.join(`db_game_${result.dbGameId}`);
                                 playerSocket.leave(`game_${playerData.gameId}`);
+                                
+                                // Add to DB game tracking
+                                dbGamePlayers.get(result.dbGameId).add(socketId);
                                 
                                 // Send individual confirmation with dbGameId
                                 playerSocket.emit('db_game_created', {
@@ -381,7 +416,7 @@ io.on('connection', (socket) => {
                 console.log(`✓ Race ${result.raceName} ${confirmed ? 'confirmed' : 'selected'} by ${result.playerName} in game ${data.gameId}`);
                 
                 if (confirmed) {
-                    // Race was confirmed
+                    // Race was confirmed - now written to database
                     socket.emit('race_selection_confirmed', {
                         raceId: result.raceId,
                         raceName: result.raceName,
@@ -397,7 +432,7 @@ io.on('connection', (socket) => {
                         totalPlayers: result.totalPlayers
                     });
                 } else {
-                    // Race was only selected (not confirmed)
+                    // Race was only selected (not confirmed yet)
                     // Notify all players about selection
                     io.to(`db_game_${data.gameId}`).emit('player_race_selected', {
                         playerName: result.playerName,
@@ -407,6 +442,9 @@ io.on('connection', (socket) => {
                         totalPlayers: result.totalPlayers
                     });
                 }
+
+                // Always broadcast sync after any race selection change
+                await broadcastRaceSelectionSync(data.gameId);
 
                 if (result.allRacesConfirmed) {
                     console.log(`🎯 All races confirmed for game ${data.gameId}, starting map generation...`);
@@ -453,7 +491,7 @@ io.on('connection', (socket) => {
         }
     });
 
-    // New event for deselecting/changing races
+    // NEW: Enhanced race deselection with database removal
     socket.on('deselect_race', async (data) => {
         try {
             console.log('Race deselection request:', data);
@@ -478,6 +516,9 @@ io.on('connection', (socket) => {
                 socket.emit('race_deselection_confirmed', {
                     message: 'Rassenauswahl zurückgesetzt'
                 });
+
+                // Broadcast updated race selection sync
+                await broadcastRaceSelectionSync(data.gameId);
             } else {
                 socket.emit('error', result.message);
             }
@@ -510,6 +551,12 @@ io.on('connection', (socket) => {
         try {
             console.log(`Player ${data.playerName} joining DB game room ${data.gameId}`);
             socket.join(`db_game_${data.gameId}`);
+            
+            // Add to tracking
+            if (!dbGamePlayers.has(data.gameId)) {
+                dbGamePlayers.set(data.gameId, new Set());
+            }
+            dbGamePlayers.get(data.gameId).add(socket.id);
         } catch (error) {
             console.error('Error joining DB game room:', error);
         }
@@ -579,8 +626,8 @@ io.on('connection', (socket) => {
     });
 
     // Disconnect
-    socket.on('disconnect', () => {
-        console.log(`Spieler getrennt: ${socket.id}`);
+    socket.on('disconnect', (reason) => {
+        console.log(`Spieler getrennt: ${socket.id}, Grund: ${reason}`);
         
         // Clear interval
         if (gameListInterval) {
@@ -588,6 +635,7 @@ io.on('connection', (socket) => {
         }
         
         try {
+            // Handle memory game disconnection
             const result = improvedLobbyManager.handleDisconnect(socket.id);
             
             if (result && result.success && !result.gameDeleted) {
@@ -606,6 +654,21 @@ io.on('connection', (socket) => {
                 }
             }
             
+            // Handle DB game disconnection
+            for (const [gameId, playerSet] of dbGamePlayers) {
+                if (playerSet.has(socket.id)) {
+                    playerSet.delete(socket.id);
+                    console.log(`Removed socket ${socket.id} from DB game ${gameId}`);
+                    
+                    // If no players left in DB game, clean up
+                    if (playerSet.size === 0) {
+                        dbGamePlayers.delete(gameId);
+                        console.log(`Cleaned up empty DB game ${gameId}`);
+                    }
+                    break;
+                }
+            }
+            
             // Update games list for everyone
             io.emit('games_updated', improvedLobbyManager.getAvailableGames());
             
@@ -614,6 +677,28 @@ io.on('connection', (socket) => {
         }
     });
 });
+
+// Periodic cleanup of stale connections
+setInterval(() => {
+    const now = Date.now();
+    const staleThreshold = 5 * 60 * 1000; // 5 minutes
+    
+    // Clean up stale DB game players
+    for (const [gameId, playerSet] of dbGamePlayers) {
+        for (const socketId of playerSet) {
+            const socket = io.sockets.sockets.get(socketId);
+            if (!socket || (socket.lastSeen && now - socket.lastSeen > staleThreshold)) {
+                playerSet.delete(socketId);
+                console.log(`Cleaned up stale socket ${socketId} from DB game ${gameId}`);
+            }
+        }
+        
+        if (playerSet.size === 0) {
+            dbGamePlayers.delete(gameId);
+            console.log(`Cleaned up empty DB game ${gameId}`);
+        }
+    }
+}, 60000); // Every minute
 
 // Error Handling
 app.use((err, req, res, next) => {
@@ -628,4 +713,56 @@ server.listen(PORT, () => {
     console.log(`📱 Spiel verfügbar unter: http://localhost:${PORT}`);
     console.log(`💾 Memory-basierte Lobby aktiviert`);
     console.log(`🎯 Datenbank für persistente Spiele bereit`);
-});
+    console.log(`🔄 Erweiterte Socket.IO-Konfiguration aktiv`);
+});Error rejoining DB game room:', error);
+            socket.emit('error', 'Fehler beim Wiederverbinden');
+        }
+    });
+
+    // NEW: Request race selection sync
+    socket.on('request_race_selection_sync', async (data) => {
+        try {
+            console.log(`Race selection sync requested by ${data.playerName} for game ${data.gameId}`);
+            
+            const result = await gameController.getAllRaceSelections(data.gameId);
+            if (result.success) {
+                socket.emit('race_selection_sync', {
+                    gameId: data.gameId,
+                    selections: result.selections,
+                    timestamp: new Date().toISOString()
+                });
+            }
+        } catch (error) {
+            console.error('Error sending race selection sync:', error);
+            socket.emit('error', 'Fehler beim Synchronisieren der Rassenwahlen');
+        }
+    });
+
+    // Lobby Events (Memory-based)
+    socket.on('create_game', (data) => {
+        try {
+            console.log('Create game request:', data);
+            const result = improvedLobbyManager.createGame(
+                socket.id, 
+                data.playerName, 
+                data.gameName, 
+                data.maxPlayers, 
+                data.mapSize
+            );
+            
+            if (result.success) {
+                socket.join(`game_${result.gameId}`);
+                socket.emit('game_created', result);
+                
+                // Send updated player list to game room
+                io.to(`game_${result.gameId}`).emit('lobby_players_updated', result.players);
+                
+                // Update games list for everyone immediately
+                io.emit('games_updated', improvedLobbyManager.getAvailableGames());
+                
+                console.log(`Game created: ${data.gameName}, broadcasting to all clients`);
+            } else {
+                socket.emit('error', result.message);
+            }
+        } catch (error) {
+            console.error('

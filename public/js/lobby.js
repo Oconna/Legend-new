@@ -1,4 +1,4 @@
-// Lobby JavaScript - Frontend logic for improved lobby
+// Lobby JavaScript - Frontend logic with improved connection handling
 
 class LobbyManager {
     constructor() {
@@ -14,6 +14,9 @@ class LobbyManager {
         this.raceConfirmed = false;
         this.gameDbId = null; // Database ID after game starts
         this.playersRaceStatus = new Map(); // Track all players' race status
+        this.reconnectAttempts = 0;
+        this.maxReconnectAttempts = 10;
+        this.heartbeatInterval = null;
         
         this.init();
     }
@@ -24,25 +27,63 @@ class LobbyManager {
         this.loadPlayerName();
         this.loadAvailableGames();
         this.loadRaces();
+        this.startHeartbeat();
     }
 
     setupSocket() {
-        this.socket = io();
+        // Enhanced Socket.IO configuration with better reconnection
+        this.socket = io({
+            transports: ['websocket', 'polling'],
+            upgrade: true,
+            rememberUpgrade: true,
+            timeout: 20000,
+            reconnection: true,
+            reconnectionDelay: 1000,
+            reconnectionDelayMax: 5000,
+            maxReconnectionAttempts: this.maxReconnectAttempts,
+            forceNew: false
+        });
         
         this.socket.on('connect', () => {
             console.log('Verbunden mit Server');
+            this.reconnectAttempts = 0;
             showNotification('Mit Server verbunden', 'success');
+            
+            // Rejoin game room if we were in one
+            this.rejoinGameRoom();
         });
 
-        this.socket.on('disconnect', () => {
-            console.log('Verbindung zum Server verloren');
-            showNotification('Verbindung zum Server verloren', 'error');
-            this.hideCurrentGameLobby();
+        this.socket.on('disconnect', (reason) => {
+            console.log('Verbindung zum Server verloren:', reason);
+            showNotification('Verbindung zum Server verloren - Versuche Reconnection...', 'warning');
+            
+            if (reason === 'io server disconnect') {
+                // Server disconnected us, reconnect manually
+                this.socket.connect();
+            }
+        });
+
+        this.socket.on('reconnect', (attemptNumber) => {
+            console.log('Reconnected after', attemptNumber, 'attempts');
+            showNotification('Verbindung wiederhergestellt!', 'success');
+            this.rejoinGameRoom();
+        });
+
+        this.socket.on('reconnect_attempt', (attemptNumber) => {
+            console.log('Reconnection attempt:', attemptNumber);
+            if (attemptNumber <= 3) {
+                showNotification(`Verbindungsversuch ${attemptNumber}...`, 'info');
+            }
+        });
+
+        this.socket.on('reconnect_failed', () => {
+            console.log('Failed to reconnect');
+            showNotification('Verbindung konnte nicht wiederhergestellt werden. Bitte lade die Seite neu.', 'error');
         });
 
         this.socket.on('error', (error) => {
             console.error('Socket Error:', error);
-            showNotification(error, 'error');
+            showNotification('Verbindungsfehler: ' + error, 'error');
         });
 
         // Game events
@@ -101,6 +142,7 @@ class LobbyManager {
             
             saveToLocalStorage('currentDbGameId', this.gameDbId);
             saveToLocalStorage('currentGameId', null);
+            saveToLocalStorage('playerName', this.playerName);
             
             showNotification(`Spiel in Datenbank erstellt (ID: ${data.dbGameId})`, 'info');
         });
@@ -112,6 +154,7 @@ class LobbyManager {
             if (data.dbGameId) {
                 this.gameDbId = data.dbGameId;
                 saveToLocalStorage('currentDbGameId', this.gameDbId);
+                saveToLocalStorage('playerName', this.playerName);
             }
             
             // Initialize players race status
@@ -135,6 +178,7 @@ class LobbyManager {
             console.log('DB Game ID assigned:', data);
             this.gameDbId = data.dbGameId;
             saveToLocalStorage('currentDbGameId', this.gameDbId);
+            saveToLocalStorage('playerName', this.playerName);
             
             // If race selection modal is already open, update the ID
             if (document.getElementById('raceSelectionModal').style.display === 'block') {
@@ -238,6 +282,36 @@ class LobbyManager {
             // Don't show notification here as it's already shown in changeRaceSelection()
         });
 
+        // NEW: Race selection sync event
+        this.socket.on('race_selection_sync', (data) => {
+            console.log('Received race selection sync:', data);
+            
+            // Update all players race status from server
+            this.playersRaceStatus.clear();
+            if (data.selections) {
+                data.selections.forEach(selection => {
+                    this.playersRaceStatus.set(selection.player_name, {
+                        playerName: selection.player_name,
+                        selectedRaceId: selection.race_id,
+                        confirmed: selection.race_confirmed,
+                        raceName: selection.race_name
+                    });
+                    
+                    // Update own status if this is our player
+                    if (selection.player_name === this.playerName) {
+                        this.selectedRaceId = selection.race_id;
+                        this.raceConfirmed = selection.race_confirmed;
+                    }
+                });
+            }
+            
+            // Refresh all displays
+            this.updatePlayersRaceStatus();
+            this.updateRaceCardsDisplay();
+            this.updateRaceSelectionButtons();
+            this.updateRaceSelectionStatus();
+        });
+
         this.socket.on('game_started', (data) => {
             showNotification('Spiel startet! Weiterleitung...', 'success');
             
@@ -257,6 +331,51 @@ class LobbyManager {
                 playerName: this.playerName
             });
         });
+
+        // NEW: Heartbeat response
+        this.socket.on('heartbeat_response', () => {
+            // Server is alive, connection is good
+            console.log('Heartbeat OK');
+        });
+    }
+
+    // NEW: Start heartbeat to keep connection alive
+    startHeartbeat() {
+        this.heartbeatInterval = setInterval(() => {
+            if (this.socket && this.socket.connected) {
+                this.socket.emit('heartbeat', {
+                    playerName: this.playerName,
+                    gameDbId: this.gameDbId,
+                    timestamp: Date.now()
+                });
+            }
+        }, 30000); // Every 30 seconds
+    }
+
+    // NEW: Rejoin game room after reconnection
+    rejoinGameRoom() {
+        // Try to restore state from localStorage
+        const savedGameDbId = loadFromLocalStorage('currentDbGameId', null);
+        const savedPlayerName = loadFromLocalStorage('playerName', '');
+        
+        if (savedGameDbId && savedPlayerName) {
+            this.gameDbId = savedGameDbId;
+            this.playerName = savedPlayerName;
+            
+            console.log('Rejoining game room:', savedGameDbId, 'as', savedPlayerName);
+            
+            // Rejoin the database game room
+            this.socket.emit('rejoin_db_game_room', {
+                gameId: savedGameDbId,
+                playerName: savedPlayerName
+            });
+            
+            // Request current race selection status
+            this.socket.emit('request_race_selection_sync', {
+                gameId: savedGameDbId,
+                playerName: savedPlayerName
+            });
+        }
     }
 
     setupEventListeners() {
@@ -330,6 +449,14 @@ class LobbyManager {
                 if (activeElement && (activeElement.id === 'playerName' || activeElement.id === 'gameName')) {
                     this.createGame();
                 }
+            }
+        });
+
+        // Handle page visibility changes (mobile/background tabs)
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden && this.socket && !this.socket.connected) {
+                console.log('Page became visible, attempting reconnection...');
+                this.socket.connect();
             }
         });
     }
@@ -524,6 +651,10 @@ class LobbyManager {
         this.raceConfirmed = false;
         this.gameDbId = null;
         this.playersRaceStatus.clear();
+        
+        // Clear localStorage
+        saveToLocalStorage('currentDbGameId', null);
+        saveToLocalStorage('currentGameId', null);
         
         // Reset ready button
         const readyBtn = document.getElementById('readyBtn');
@@ -912,7 +1043,7 @@ class LobbyManager {
         
         console.log('Confirming race selection:', this.selectedRaceId);
         
-        // Send confirmation to server
+        // Send confirmation to server (this will write to database)
         this.notifyRaceSelection(this.selectedRaceId, true);
     }
     
@@ -950,7 +1081,7 @@ class LobbyManager {
         this.updateRaceSelectionStatus();
         this.updatePlayersRaceStatus();
         
-        // Now notify server about deselection
+        // Now notify server about deselection (this will remove from database)
         this.notifyRaceDeselection();
         
         showNotification('Du kannst jetzt eine neue Rasse wählen', 'info');
@@ -966,20 +1097,22 @@ class LobbyManager {
         
         if (!gameDbId) {
             console.warn('No gameDbId available for race deselection');
+            showNotification('Spiel-ID fehlt. Bitte lade die Seite neu.', 'error');
             return;
         }
         
         if (!this.playerName) {
             console.warn('No playerName available for race deselection');
+            showNotification('Spielername fehlt. Bitte lade die Seite neu.', 'error');
             return;
         }
 
-        console.log('Sending race deselection (allowing confirmed races):', {
+        console.log('Sending race deselection (removing from database):', {
             gameId: gameDbId,
             playerName: this.playerName
         });
 
-        // Send deselection to server (should work even for confirmed races)
+        // Send deselection to server (will remove race_id and set race_confirmed to false in database)
         this.socket.emit('deselect_race', {
             gameId: gameDbId,
             playerName: this.playerName
@@ -1018,7 +1151,7 @@ class LobbyManager {
             confirmed: confirmed
         });
 
-        // Send selection to server
+        // Send selection to server (will write to database if confirmed)
         this.socket.emit('select_race', {
             gameId: gameDbId,
             playerName: this.playerName,
@@ -1174,9 +1307,26 @@ class LobbyManager {
             statusEl.classList.remove('confirmed');
         }
     }
+
+    // Cleanup on page unload
+    destroy() {
+        if (this.heartbeatInterval) {
+            clearInterval(this.heartbeatInterval);
+        }
+        if (this.socket) {
+            this.socket.disconnect();
+        }
+    }
 }
 
 // Initialize lobby when page loads
 document.addEventListener('DOMContentLoaded', () => {
     window.lobbyManager = new LobbyManager();
+});
+
+// Cleanup on page unload
+window.addEventListener('beforeunload', () => {
+    if (window.lobbyManager) {
+        window.lobbyManager.destroy();
+    }
 });

@@ -57,31 +57,31 @@ class GameController {
 
             // Bei Bestätigung oder Auswahl: Erlaube mehrere Spieler pro Rasse
             if (confirmed) {
-                // Speichere die bestätigte Rassenwahl in der Datenbank
+                // WICHTIG: Speichere die bestätigte Rassenwahl in der Datenbank
                 await db.query(
-                    'UPDATE game_players SET race_id = ?, race_confirmed = true WHERE game_id = ? AND player_name = ?',
+                    'UPDATE game_players SET race_id = ?, race_confirmed = 1 WHERE game_id = ? AND player_name = ?',
                     [raceId, gameId, playerName]
                 );
 
-                console.log(`✅ Race ${race[0].name} confirmed by player ${playerName}`);
+                console.log(`✅ Race ${race[0].name} CONFIRMED and SAVED TO DATABASE by player ${playerName}`);
             } else {
                 // Nur Auswahl speichern (nicht bestätigt) - überschreibe vorherige Auswahl
                 await db.query(
-                    'UPDATE game_players SET race_id = ?, race_confirmed = false WHERE game_id = ? AND player_name = ?',
+                    'UPDATE game_players SET race_id = ?, race_confirmed = 0 WHERE game_id = ? AND player_name = ?',
                     [raceId, gameId, playerName]
                 );
 
-                console.log(`🤔 Race ${race[0].name} selected (not confirmed) by player ${playerName}`);
+                console.log(`🤔 Race ${race[0].name} selected (not confirmed, not permanently saved) by player ${playerName}`);
             }
 
             // Prüfe Status der Rassenwahlen
             const raceSelectionStatus = await db.query(`
                 SELECT 
                     COUNT(*) as total_players,
-                    SUM(CASE WHEN race_id IS NOT NULL AND race_confirmed = true THEN 1 ELSE 0 END) as races_confirmed,
+                    SUM(CASE WHEN race_id IS NOT NULL AND race_confirmed = 1 THEN 1 ELSE 0 END) as races_confirmed,
                     SUM(CASE WHEN race_id IS NOT NULL THEN 1 ELSE 0 END) as races_selected
                 FROM game_players 
-                WHERE game_id = ? AND is_active = true
+                WHERE game_id = ? AND is_active = 1
             `, [gameId]);
 
             const status = raceSelectionStatus[0];
@@ -139,18 +139,18 @@ class GameController {
             // Erlaube Deselection auch von bestätigten Rassen (für "Rasse ändern" Funktion)
             console.log(`Allowing deselection for player ${playerName} (was confirmed: ${player[0].race_confirmed})`);
 
-            // Entferne die Rassenwahl komplett
+            // WICHTIG: Entferne die Rassenwahl komplett aus der Datenbank
             await db.query(
-                'UPDATE game_players SET race_id = NULL, race_confirmed = false WHERE game_id = ? AND player_name = ?',
+                'UPDATE game_players SET race_id = NULL, race_confirmed = 0 WHERE game_id = ? AND player_name = ?',
                 [gameId, playerName]
             );
 
-            console.log(`✓ Race deselected for player ${playerName}`);
+            console.log(`✓ Race COMPLETELY REMOVED FROM DATABASE for player ${playerName}`);
 
             return {
                 success: true,
                 playerName: playerName,
-                wasConfirmed: player[0].race_confirmed
+                wasConfirmed: player[0].race_confirmed === 1
             };
 
         } catch (error) {
@@ -165,13 +165,20 @@ class GameController {
                 SELECT 
                     gp.player_name,
                     gp.race_id,
+                    gp.race_confirmed,
                     r.name as race_name,
                     r.color_hex as race_color
                 FROM game_players gp
                 LEFT JOIN races r ON gp.race_id = r.id
-                WHERE gp.game_id = ? AND gp.is_active = true
+                WHERE gp.game_id = ? AND gp.is_active = 1
                 ORDER BY gp.turn_order
             `, [gameId]);
+
+            console.log(`Retrieved race selections for game ${gameId}:`, selections.map(s => ({
+                player: s.player_name,
+                race: s.race_name,
+                confirmed: s.race_confirmed
+            })));
 
             return { success: true, selections: selections };
         } catch (error) {
@@ -190,19 +197,19 @@ class GameController {
                 return { success: false, message: 'Spiel nicht gefunden' };
             }
 
-            // Prüfe ob alle Spieler eine Rasse gewählt haben
+            // Prüfe ob alle Spieler eine Rasse gewählt und bestätigt haben
             const raceCheck = await db.query(`
                 SELECT 
                     COUNT(*) as total_players,
-                    SUM(CASE WHEN race_id IS NOT NULL THEN 1 ELSE 0 END) as races_selected
+                    SUM(CASE WHEN race_id IS NOT NULL AND race_confirmed = 1 THEN 1 ELSE 0 END) as races_confirmed
                 FROM game_players 
-                WHERE game_id = ? AND is_active = true
+                WHERE game_id = ? AND is_active = 1
             `, [gameId]);
 
-            if (raceCheck[0].races_selected !== raceCheck[0].total_players) {
+            if (raceCheck[0].races_confirmed !== raceCheck[0].total_players) {
                 return { 
                     success: false, 
-                    message: 'Nicht alle Spieler haben eine Rasse gewählt' 
+                    message: `Nicht alle Spieler haben eine Rasse bestätigt (${raceCheck[0].races_confirmed}/${raceCheck[0].total_players})` 
                 };
             }
 
@@ -210,11 +217,11 @@ class GameController {
                 SELECT gp.*, r.name as race_name, r.color_hex as race_color
                 FROM game_players gp 
                 JOIN races r ON gp.race_id = r.id 
-                WHERE gp.game_id = ? AND gp.is_active = true
+                WHERE gp.game_id = ? AND gp.is_active = 1 AND gp.race_confirmed = 1
                 ORDER BY gp.turn_order
             `, [gameId]);
 
-            console.log(`Game ${gameId} has ${players.length} players with races selected`);
+            console.log(`Game ${gameId} has ${players.length} players with confirmed races`);
 
             // Generate map
             const mapGenerator = new MapGenerator();
@@ -298,7 +305,7 @@ class GameController {
                         INSERT INTO game_units (
                             game_id, player_id, unit_id, x_coordinate, y_coordinate, 
                             current_health, movement_points_left, has_attacked
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, false)
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, 0)
                     `, [
                         gameId, 
                         player.id, 
@@ -384,7 +391,7 @@ class GameController {
                     r.color_hex as race_color
                 FROM game_players gp
                 LEFT JOIN races r ON gp.race_id = r.id
-                WHERE gp.game_id = ? AND gp.is_active = true
+                WHERE gp.game_id = ? AND gp.is_active = 1
                 ORDER BY gp.turn_order
             `, [gameId]);
 
@@ -475,6 +482,106 @@ class GameController {
         } catch (error) {
             console.error('Error executing player move:', error);
             return { success: false, message: 'Fehler bei der Bewegung' };
+        }
+    }
+
+    // NEW: Method to validate race selection integrity
+    async validateRaceSelectionIntegrity(gameId) {
+        try {
+            const players = await db.query(`
+                SELECT 
+                    gp.id,
+                    gp.player_name,
+                    gp.race_id,
+                    gp.race_confirmed,
+                    r.name as race_name
+                FROM game_players gp
+                LEFT JOIN races r ON gp.race_id = r.id
+                WHERE gp.game_id = ? AND gp.is_active = 1
+                ORDER BY gp.player_name
+            `, [gameId]);
+
+            const issues = [];
+
+            for (const player of players) {
+                if (!player.race_id) {
+                    issues.push(`Player ${player.player_name} has no race selected`);
+                } else if (!player.race_confirmed) {
+                    issues.push(`Player ${player.player_name} has race ${player.race_name} selected but not confirmed`);
+                }
+            }
+
+            return {
+                success: true,
+                isValid: issues.length === 0,
+                issues: issues,
+                players: players
+            };
+
+        } catch (error) {
+            console.error('Error validating race selection integrity:', error);
+            return { success: false, message: 'Fehler bei der Validierung' };
+        }
+    }
+
+    // NEW: Method to force reset all race selections (admin function)
+    async resetAllRaceSelections(gameId) {
+        try {
+            console.log(`Resetting all race selections for game ${gameId}`);
+
+            await db.query(
+                'UPDATE game_players SET race_id = NULL, race_confirmed = 0 WHERE game_id = ?',
+                [gameId]
+            );
+
+            console.log(`✓ All race selections reset for game ${gameId}`);
+            return { success: true };
+
+        } catch (error) {
+            console.error('Error resetting race selections:', error);
+            return { success: false, message: 'Fehler beim Zurücksetzen der Rassenwahlen' };
+        }
+    }
+
+    // NEW: Method to get detailed game statistics
+    async getGameStatistics(gameId) {
+        try {
+            const stats = await db.query(`
+                SELECT 
+                    g.id,
+                    g.name,
+                    g.status,
+                    g.max_players,
+                    g.current_players,
+                    g.map_size,
+                    g.turn_number,
+                    g.created_at,
+                    g.started_at,
+                    COUNT(gp.id) as actual_player_count,
+                    SUM(CASE WHEN gp.race_id IS NOT NULL THEN 1 ELSE 0 END) as players_with_race,
+                    SUM(CASE WHEN gp.race_confirmed = 1 THEN 1 ELSE 0 END) as players_confirmed,
+                    COUNT(gu.id) as total_units,
+                    COUNT(gm.id) as map_tiles
+                FROM games g
+                LEFT JOIN game_players gp ON g.id = gp.game_id AND gp.is_active = 1
+                LEFT JOIN game_units gu ON g.id = gu.game_id
+                LEFT JOIN game_maps gm ON g.id = gm.game_id
+                WHERE g.id = ?
+                GROUP BY g.id
+            `, [gameId]);
+
+            if (stats.length === 0) {
+                return { success: false, message: 'Spiel nicht gefunden' };
+            }
+
+            return {
+                success: true,
+                statistics: stats[0]
+            };
+
+        } catch (error) {
+            console.error('Error getting game statistics:', error);
+            return { success: false, message: 'Fehler beim Abrufen der Spielstatistiken' };
         }
     }
 }

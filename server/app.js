@@ -12,6 +12,27 @@ const gameController = require('./controllers/gameController');
 // Import database
 const db = require('./config/database');
 
+// Fallback function if lobbyController.getGamePlayers is missing
+async function getGamePlayersFromDB(gameId) {
+    try {
+        const players = await db.query(`
+            SELECT 
+                gp.*,
+                r.name as race_name,
+                r.color_hex as race_color
+            FROM game_players gp
+            LEFT JOIN races r ON gp.race_id = r.id
+            WHERE gp.game_id = ? AND gp.is_active = true
+            ORDER BY gp.joined_at
+        `, [gameId]);
+
+        return players;
+    } catch (error) {
+        console.error('Error getting game players from DB:', error);
+        return [];
+    }
+}
+
 // Express App Setup
 const app = express();
 const server = http.createServer(app);
@@ -21,6 +42,14 @@ const io = socketIo(server, {
         methods: ["GET", "POST"]
     }
 });
+
+// Debug: Check what's available in lobbyController
+console.log('=== LOBBY CONTROLLER DEBUG ===');
+console.log('lobbyController type:', typeof lobbyController);
+console.log('lobbyController keys:', Object.keys(lobbyController || {}));
+console.log('getGamePlayers available:', typeof lobbyController?.getGamePlayers);
+console.log('getAvailableGames available:', typeof lobbyController?.getAvailableGames);
+console.log('===============================');
 
 // Middleware
 app.use(cors());
@@ -92,6 +121,28 @@ app.get('/api/test-lobby', async (req, res) => {
     }
 });
 
+app.get('/api/test-controller', async (req, res) => {
+    try {
+        res.json({
+            status: 'OK',
+            lobbyController: {
+                type: typeof lobbyController,
+                keys: Object.keys(lobbyController || {}),
+                getGamePlayers: typeof lobbyController?.getGamePlayers,
+                getAvailableGames: typeof lobbyController?.getAvailableGames,
+                createGame: typeof lobbyController?.createGame,
+                joinGame: typeof lobbyController?.joinGame
+            },
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        res.status(500).json({
+            status: 'ERROR',
+            error: error.message
+        });
+    }
+});
+
 app.get('/api/games', async (req, res) => {
     try {
         const games = await lobbyController.getAvailableGames();
@@ -127,11 +178,37 @@ io.on('connection', (socket) => {
                 socket.join(result.gameId);
                 socket.emit('game_created', result);
                 
-                // Send current lobby state
-                const players = await lobbyController.getGamePlayers(result.gameId);
-                io.to(result.gameId).emit('lobby_players_updated', players);
+                // Send current lobby state with robust error handling
+                try {
+                    let players = [];
+                    
+                    // Try lobbyController method first
+                    if (lobbyController && typeof lobbyController.getGamePlayers === 'function') {
+                        console.log('Using lobbyController.getGamePlayers');
+                        players = await lobbyController.getGamePlayers(result.gameId);
+                    } else {
+                        console.log('lobbyController.getGamePlayers not available, using fallback');
+                        players = await getGamePlayersFromDB(result.gameId);
+                    }
+                    
+                    io.to(result.gameId).emit('lobby_players_updated', players);
+                } catch (playerError) {
+                    console.error('Error getting players:', playerError);
+                    // Send empty array to prevent frontend errors
+                    io.to(result.gameId).emit('lobby_players_updated', []);
+                }
                 
-                io.emit('games_updated', await lobbyController.getAvailableGames());
+                // Get available games with fallback
+                try {
+                    let games = [];
+                    if (lobbyController && typeof lobbyController.getAvailableGames === 'function') {
+                        games = await lobbyController.getAvailableGames();
+                    }
+                    io.emit('games_updated', games);
+                } catch (gamesError) {
+                    console.error('Error getting games:', gamesError);
+                    io.emit('games_updated', []);
+                }
             } else {
                 console.error('Game creation failed:', result.message);
                 socket.emit('error', result.message);
@@ -158,11 +235,36 @@ io.on('connection', (socket) => {
                     currentPlayers: result.currentPlayers
                 });
                 
-                // Send updated player list to all players in lobby
-                const players = await lobbyController.getGamePlayers(data.gameId);
-                io.to(data.gameId).emit('lobby_players_updated', players);
+                // Send updated player list with robust error handling
+                try {
+                    let players = [];
+                    
+                    // Try lobbyController method first
+                    if (lobbyController && typeof lobbyController.getGamePlayers === 'function') {
+                        console.log('Using lobbyController.getGamePlayers');
+                        players = await lobbyController.getGamePlayers(data.gameId);
+                    } else {
+                        console.log('lobbyController.getGamePlayers not available, using fallback');
+                        players = await getGamePlayersFromDB(data.gameId);
+                    }
+                    
+                    io.to(data.gameId).emit('lobby_players_updated', players);
+                } catch (playerError) {
+                    console.error('Error getting players:', playerError);
+                    io.to(data.gameId).emit('lobby_players_updated', []);
+                }
                 
-                io.emit('games_updated', await lobbyController.getAvailableGames());
+                // Get available games with fallback
+                try {
+                    let games = [];
+                    if (lobbyController && typeof lobbyController.getAvailableGames === 'function') {
+                        games = await lobbyController.getAvailableGames();
+                    }
+                    io.emit('games_updated', games);
+                } catch (gamesError) {
+                    console.error('Error getting games:', gamesError);
+                    io.emit('games_updated', []);
+                }
             } else {
                 console.error('Game join failed:', result.message);
                 socket.emit('error', result.message);

@@ -63,7 +63,7 @@ class LobbyManager {
                 }
             });
         }
-    }}
+    }
 
     setupSocket() {
         // Enhanced Socket.IO configuration with better reconnection

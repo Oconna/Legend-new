@@ -557,432 +557,6 @@ io.on('connection', (socket) => {
         }
     });
 
-    // Disconnect
-    socket.on('disconnect', (reason) => {
-        console.log(`Spieler getrennt: ${socket.id}, Grund: ${reason}`);
-        
-        // Clear interval
-        if (gameListInterval) {
-            clearInterval(gameListInterval);
-        }
-        
-        try {
-            // Handle memory game disconnection
-            const result = improvedLobbyManager.handleDisconnect(socket.id);
-            
-            if (result && result.success && !result.gameDeleted) {
-                // Find which game room to notify
-                const playerData = improvedLobbyManager.players.get(socket.id);
-                if (playerData) {
-                    const gameRoom = `game_${playerData.gameId}`;
-                    
-                    // Notify remaining players
-                    socket.to(gameRoom).emit('player_left', {
-                        playerName: playerData.name
-                    });
-                    
-                    // Send updated player list
-                    io.to(gameRoom).emit('lobby_players_updated', result.players);
-                }
-            }
-            
-            // Handle DB game disconnection
-            for (const [gameId, playerSet] of dbGamePlayers) {
-                if (playerSet.has(socket.id)) {
-                    playerSet.delete(socket.id);
-                    console.log(`Removed socket ${socket.id} from DB game ${gameId}`);
-                    
-                    // If no players left in DB game, clean up
-                    if (playerSet.size === 0) {
-                        dbGamePlayers.delete(gameId);
-                        console.log(`Cleaned up empty DB game ${gameId}`);
-                    }
-                    break;
-                }
-            }
-            
-            // Handle chat room disconnection
-            for (const [gameId, chatRoom] of chatRooms) {
-                if (chatRoom.players.has(socket.id)) {
-                    chatRoom.players.delete(socket.id);
-                    console.log(`Removed socket ${socket.id} from chat room ${gameId}`);
-                    
-                    // Notify remaining players in chat
-                    socket.to(`chat_${gameId}`).emit('chat_player_count', {
-                        count: chatRoom.players.size
-                    });
-                    
-                    // Clean up empty chat rooms
-                    if (chatRoom.players.size === 0) {
-                        console.log(`Cleaning up empty chat room for game ${gameId}`);
-                        // Keep messages for a while in case players reconnect
-                        setTimeout(() => {
-                            if (chatRooms.has(gameId) && chatRooms.get(gameId).players.size === 0) {
-                                chatRooms.delete(gameId);
-                                console.log(`Chat room for game ${gameId} deleted`);
-                            }
-                        }, 5 * 60 * 1000); // 5 minutes delay
-                    }
-                    break;
-                }
-            }
-            
-            // Update games list for everyone
-            io.emit('games_updated', improvedLobbyManager.getAvailableGames());
-            
-        } catch (error) {
-            console.error('Error handling disconnect:', error);
-        }
-    });
-});
-
-// Periodic cleanup of stale connections and old chat rooms
-setInterval(() => {
-    const now = Date.now();
-    const staleThreshold = 5 * 60 * 1000; // 5 minutes
-    const maxChatAge = 24 * 60 * 60 * 1000; // 24 hours
-    
-    // Clean up stale DB game players
-    for (const [gameId, playerSet] of dbGamePlayers) {
-        for (const socketId of playerSet) {
-            const socket = io.sockets.sockets.get(socketId);
-            if (!socket || (socket.lastSeen && now - socket.lastSeen > staleThreshold)) {
-                playerSet.delete(socketId);
-                console.log(`Cleaned up stale socket ${socketId} from DB game ${gameId}`);
-            }
-        }
-        
-        if (playerSet.size === 0) {
-            dbGamePlayers.delete(gameId);
-            console.log(`Cleaned up empty DB game ${gameId}`);
-        }
-    }
-    
-    // Clean up old chat rooms
-    for (const [gameId, chatRoom] of chatRooms) {
-        const roomAge = now - chatRoom.createdAt.getTime();
-        
-        // Clean up old empty chat rooms
-        if (chatRoom.players.size === 0 && roomAge > maxChatAge) {
-            chatRooms.delete(gameId);
-            console.log(`Cleaned up old chat room for game ${gameId}`);
-        }
-    }
-}, 60000); // Every minute
-
-// Health check endpoint
-app.get('/health', async (req, res) => {
-    try {
-        const dbCheck = await db.query('SELECT 1');
-        const timestamp = new Date().toISOString();
-        
-        res.json({
-            status: 'healthy',
-            timestamp: timestamp,
-            database: 'connected',
-            uptime: process.uptime(),
-            memory: process.memoryUsage(),
-            activeConnections: io.engine.clientsCount,
-            memoryGames: improvedLobbyManager.games.size,
-            memoryPlayers: improvedLobbyManager.players.size,
-            dbGames: dbGamePlayers.size,
-            chatRooms: chatRooms.size,
-            version: require('../package.json').version
-        });
-    } catch (error) {
-        res.status(500).json({
-            status: 'unhealthy',
-            error: error.message,
-            timestamp: new Date().toISOString()
-        });
-    }
-});
-
-// Debug endpoints (only in development)
-if (process.env.NODE_ENV === 'development') {
-    app.get('/debug/memory-games', (req, res) => {
-        const games = Array.from(improvedLobbyManager.games.entries()).map(([id, game]) => ({
-            id: id,
-            name: game.name,
-            players: Array.from(game.players.values()).map(p => p.name),
-            status: game.status,
-            createdAt: game.createdAt
-        }));
-        
-        res.json({
-            totalGames: games.length,
-            games: games,
-            timestamp: new Date().toISOString()
-        });
-    });
-
-    app.get('/debug/db-games', (req, res) => {
-        const games = Array.from(dbGamePlayers.entries()).map(([gameId, playerSet]) => ({
-            gameId: gameId,
-            playerCount: playerSet.size,
-            socketIds: Array.from(playerSet)
-        }));
-        
-        res.json({
-            totalDbGames: games.length,
-            games: games,
-            timestamp: new Date().toISOString()
-        });
-    });
-
-    app.get('/debug/chat-rooms', (req, res) => {
-        const rooms = Array.from(chatRooms.entries()).map(([gameId, chatRoom]) => ({
-            gameId: gameId,
-            messageCount: chatRoom.messages.length,
-            playerCount: chatRoom.players.size,
-            createdAt: chatRoom.createdAt,
-            lastMessage: chatRoom.messages.length > 0 ? chatRoom.messages[chatRoom.messages.length - 1] : null
-        }));
-        
-        res.json({
-            totalChatRooms: rooms.length,
-            rooms: rooms,
-            timestamp: new Date().toISOString()
-        });
-    });
-
-    app.get('/debug/socket-rooms', (req, res) => {
-        const rooms = [];
-        for (const [roomName, room] of io.sockets.adapter.rooms) {
-            if (!roomName.startsWith('socket.io#')) {
-                rooms.push({
-                    name: roomName,
-                    playerCount: room.size,
-                    socketIds: Array.from(room)
-                });
-            }
-        }
-        
-        res.json({
-            totalRooms: rooms.length,
-            rooms: rooms,
-            timestamp: new Date().toISOString()
-        });
-    });
-
-    app.post('/debug/broadcast-test/:gameId', async (req, res) => {
-        try {
-            const gameId = parseInt(req.params.gameId);
-            const message = req.body.message || 'Test broadcast message';
-            
-            io.to(`db_game_${gameId}`).emit('debug_broadcast', {
-                message: message,
-                timestamp: new Date().toISOString(),
-                gameId: gameId
-            });
-            
-            res.json({
-                success: true,
-                message: `Broadcast sent to game ${gameId}`,
-                roomName: `db_game_${gameId}`
-            });
-        } catch (error) {
-            res.status(500).json({
-                success: false,
-                error: error.message
-            });
-        }
-    });
-
-    app.post('/debug/force-sync/:gameId', async (req, res) => {
-        try {
-            const gameId = parseInt(req.params.gameId);
-            await broadcastRaceSelectionSync(gameId);
-            
-            res.json({
-                success: true,
-                message: `Race selection sync forced for game ${gameId}`
-            });
-        } catch (error) {
-            res.status(500).json({
-                success: false,
-                error: error.message
-            });
-        }
-    });
-
-    app.post('/debug/send-chat-message/:gameId', (req, res) => {
-        try {
-            const gameId = parseInt(req.params.gameId);
-            const message = req.body.message || 'Test chat message from admin';
-            const playerName = req.body.playerName || 'System';
-            
-            // Add message to chat room
-            const chatMessage = addChatMessage(gameId, playerName, message, 'admin');
-            
-            // Broadcast to chat room
-            io.to(`chat_${gameId}`).emit('chat_message', {
-                playerName: playerName,
-                message: message,
-                timestamp: chatMessage.timestamp,
-                playerId: 'admin'
-            });
-            
-            res.json({
-                success: true,
-                message: `Chat message sent to game ${gameId}`,
-                chatMessage: chatMessage
-            });
-        } catch (error) {
-            res.status(500).json({
-                success: false,
-                error: error.message
-            });
-        }
-    });
-}
-
-// Graceful shutdown handling
-process.on('SIGTERM', () => {
-    console.log('SIGTERM received, shutting down gracefully...');
-    
-    // Close server
-    server.close(() => {
-        console.log('HTTP server closed');
-        
-        // Close database connections
-        if (db && db.pool) {
-            db.pool.end(() => {
-                console.log('Database pool closed');
-                process.exit(0);
-            });
-        } else {
-            process.exit(0);
-        }
-    });
-
-    // Force close after 30 seconds
-    setTimeout(() => {
-        console.error('Could not close connections in time, forcefully shutting down');
-        process.exit(1);
-    }, 30000);
-});
-
-process.on('SIGINT', () => {
-    console.log('SIGINT received, shutting down gracefully...');
-    
-    // Notify all connected clients about shutdown
-    io.emit('server_shutdown', {
-        message: 'Server wird heruntergefahren. Bitte speichere deinen Fortschritt.',
-        timestamp: new Date().toISOString()
-    });
-    
-    // Give clients time to receive the message
-    setTimeout(() => {
-        server.close(() => {
-            console.log('HTTP server closed');
-            process.exit(0);
-        });
-    }, 2000);
-});
-
-// Error Handling
-app.use((err, req, res, next) => {
-    console.error('Express error:', err.stack);
-    res.status(500).json({ 
-        error: 'Interner Serverfehler',
-        timestamp: new Date().toISOString(),
-        requestId: req.headers['x-request-id'] || 'unknown'
-    });
-});
-
-// 404 Handler
-app.use((req, res) => {
-    res.status(404).json({
-        error: 'Route nicht gefunden',
-        path: req.path,
-        method: req.method,
-        timestamp: new Date().toISOString()
-    });
-});
-
-// Global error handlers
-process.on('uncaughtException', (error) => {
-    console.error('Uncaught Exception:', error);
-    // In production, you might want to restart the process
-    if (process.env.NODE_ENV === 'production') {
-        console.error('Uncaught exception in production, exiting...');
-        process.exit(1);
-    }
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-    // In production, you might want to restart the process
-    if (process.env.NODE_ENV === 'production') {
-        console.error('Unhandled rejection in production, exiting...');
-        process.exit(1);
-    }
-});
-
-// Start Server
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-    console.log(`🚀 Server läuft auf Port ${PORT}`);
-    console.log(`📱 Spiel verfügbar unter: http://localhost:${PORT}`);
-    console.log(`💾 Memory-basierte Lobby aktiviert`);
-    console.log(`🎯 Datenbank für persistente Spiele bereit`);
-    console.log(`🔄 Erweiterte Socket.IO-Konfiguration aktiv`);
-    console.log(`⚡ Heartbeat-System aktiviert`);
-    console.log(`💬 Chat-System aktiviert`);
-    console.log(`🔧 Debug-Endpoints verfügbar: ${process.env.NODE_ENV === 'development'}`);
-    console.log(`🏥 Health-Check verfügbar unter: /health`);
-    
-    if (process.env.NODE_ENV === 'development') {
-        console.log(`🐛 Debug-Endpoints:`);
-        console.log(`   - GET /debug/memory-games`);
-        console.log(`   - GET /debug/db-games`);
-        console.log(`   - GET /debug/chat-rooms`);
-        console.log(`   - GET /debug/socket-rooms`);
-        console.log(`   - POST /debug/broadcast-test/:gameId`);
-        console.log(`   - POST /debug/force-sync/:gameId`);
-        console.log(`   - POST /debug/send-chat-message/:gameId`);
-        console.log(`   - GET /api/game/:gameId/chat`);
-    }
-    
-    console.log(`\n📋 Verfügbare API Endpoints:`);
-    console.log(`   - GET /api/test`);
-    console.log(`   - GET /api/games`);
-    console.log(`   - GET /api/races`);
-    console.log(`   - GET /api/game/:gameId/race-selections`);
-    console.log(`   - GET /api/game/:gameId/status`);
-    console.log(`   - GET /api/game/:gameId/chat`);
-    console.log(`   - GET /health`);
-    
-    console.log(`\n🎮 Socket.IO Events:`);
-    console.log(`   Lobby: create_game, join_game, player_ready, start_game, leave_game`);
-    console.log(`   Race: select_race, deselect_race, get_race_selections`);
-    console.log(`   Chat: join_chat_room, send_chat_message, leave_chat_room`);
-    console.log(`   Game: join_db_game_room, get_game_state, player_move, end_turn`);
-    console.log(`   System: heartbeat, rejoin_db_game_room, request_race_selection_sync`);
-    
-    if (process.env.NODE_ENV === 'development') {
-        console.log(`   Admin: admin_get_game_stats, admin_reset_race_selections, admin_clear_chat`);
-    }
-    
-    console.log(`\n🌟 Features aktiviert:`);
-    console.log(`   ✅ Multiplayer Lobby System`);
-    console.log(`   ✅ Race Selection mit Datenbank-Persistierung`);
-    console.log(`   ✅ Live Chat während Race Selection`);
-    console.log(`   ✅ Automatische Reconnection & Sync`);
-    console.log(`   ✅ Heartbeat-basierte Verbindungsüberwachung`);
-    console.log(`   ✅ Memory-effiziente Cleanup-Systeme`);
-    console.log(`   ✅ Umfassende Error Handling`);
-    console.log(`   ✅ Production-ready Health Monitoring`);
-    
-    console.log(`\n🎯 Server bereit für Strategiespiel-Action! 🏰⚔️`);
-    console.log(`📡 Alle Systeme online und betriebsbereit!`);
-    console.log(`🔗 Verbindung zur Datenbank etabliert`);
-    console.log(`🎲 Zufallsgenerierung für Karten aktiviert`);
-    console.log(`⚡ Echtzeit-Multiplayer funktionsfähig`);
-    console.log(`💾 Spieldaten werden persistent gespeichert`);
-    console.log(`\n🔥 Ready to conquer the battlefield! 🔥`);
-});
 
     // Chat Event Handlers
     // Join chat room
@@ -1464,3 +1038,431 @@ server.listen(PORT, () => {
             socket.emit('error', 'Fehler bei der Rassenabwahl');
         }
     });
+
+    // Disconnect
+    socket.on('disconnect', (reason) => {
+        console.log(`Spieler getrennt: ${socket.id}, Grund: ${reason}`);
+        
+        // Clear interval
+        if (gameListInterval) {
+            clearInterval(gameListInterval);
+        }
+        
+        try {
+            // Handle memory game disconnection
+            const result = improvedLobbyManager.handleDisconnect(socket.id);
+            
+            if (result && result.success && !result.gameDeleted) {
+                // Find which game room to notify
+                const playerData = improvedLobbyManager.players.get(socket.id);
+                if (playerData) {
+                    const gameRoom = `game_${playerData.gameId}`;
+                    
+                    // Notify remaining players
+                    socket.to(gameRoom).emit('player_left', {
+                        playerName: playerData.name
+                    });
+                    
+                    // Send updated player list
+                    io.to(gameRoom).emit('lobby_players_updated', result.players);
+                }
+            }
+            
+            // Handle DB game disconnection
+            for (const [gameId, playerSet] of dbGamePlayers) {
+                if (playerSet.has(socket.id)) {
+                    playerSet.delete(socket.id);
+                    console.log(`Removed socket ${socket.id} from DB game ${gameId}`);
+                    
+                    // If no players left in DB game, clean up
+                    if (playerSet.size === 0) {
+                        dbGamePlayers.delete(gameId);
+                        console.log(`Cleaned up empty DB game ${gameId}`);
+                    }
+                    break;
+                }
+            }
+            
+            // Handle chat room disconnection
+            for (const [gameId, chatRoom] of chatRooms) {
+                if (chatRoom.players.has(socket.id)) {
+                    chatRoom.players.delete(socket.id);
+                    console.log(`Removed socket ${socket.id} from chat room ${gameId}`);
+                    
+                    // Notify remaining players in chat
+                    socket.to(`chat_${gameId}`).emit('chat_player_count', {
+                        count: chatRoom.players.size
+                    });
+                    
+                    // Clean up empty chat rooms
+                    if (chatRoom.players.size === 0) {
+                        console.log(`Cleaning up empty chat room for game ${gameId}`);
+                        // Keep messages for a while in case players reconnect
+                        setTimeout(() => {
+                            if (chatRooms.has(gameId) && chatRooms.get(gameId).players.size === 0) {
+                                chatRooms.delete(gameId);
+                                console.log(`Chat room for game ${gameId} deleted`);
+                            }
+                        }, 5 * 60 * 1000); // 5 minutes delay
+                    }
+                    break;
+                }
+            }
+            
+            // Update games list for everyone
+            io.emit('games_updated', improvedLobbyManager.getAvailableGames());
+            
+        } catch (error) {
+            console.error('Error handling disconnect:', error);
+        }
+    });
+});
+
+// Periodic cleanup of stale connections and old chat rooms
+setInterval(() => {
+    const now = Date.now();
+    const staleThreshold = 5 * 60 * 1000; // 5 minutes
+    const maxChatAge = 24 * 60 * 60 * 1000; // 24 hours
+    
+    // Clean up stale DB game players
+    for (const [gameId, playerSet] of dbGamePlayers) {
+        for (const socketId of playerSet) {
+            const socket = io.sockets.sockets.get(socketId);
+            if (!socket || (socket.lastSeen && now - socket.lastSeen > staleThreshold)) {
+                playerSet.delete(socketId);
+                console.log(`Cleaned up stale socket ${socketId} from DB game ${gameId}`);
+            }
+        }
+        
+        if (playerSet.size === 0) {
+            dbGamePlayers.delete(gameId);
+            console.log(`Cleaned up empty DB game ${gameId}`);
+        }
+    }
+    
+    // Clean up old chat rooms
+    for (const [gameId, chatRoom] of chatRooms) {
+        const roomAge = now - chatRoom.createdAt.getTime();
+        
+        // Clean up old empty chat rooms
+        if (chatRoom.players.size === 0 && roomAge > maxChatAge) {
+            chatRooms.delete(gameId);
+            console.log(`Cleaned up old chat room for game ${gameId}`);
+        }
+    }
+}, 60000); // Every minute
+
+// Health check endpoint
+app.get('/health', async (req, res) => {
+    try {
+        const dbCheck = await db.query('SELECT 1');
+        const timestamp = new Date().toISOString();
+        
+        res.json({
+            status: 'healthy',
+            timestamp: timestamp,
+            database: 'connected',
+            uptime: process.uptime(),
+            memory: process.memoryUsage(),
+            activeConnections: io.engine.clientsCount,
+            memoryGames: improvedLobbyManager.games.size,
+            memoryPlayers: improvedLobbyManager.players.size,
+            dbGames: dbGamePlayers.size,
+            chatRooms: chatRooms.size,
+            version: require('../package.json').version
+        });
+    } catch (error) {
+        res.status(500).json({
+            status: 'unhealthy',
+            error: error.message,
+            timestamp: new Date().toISOString()
+        });
+    }
+});
+
+// Debug endpoints (only in development)
+if (process.env.NODE_ENV === 'development') {
+    app.get('/debug/memory-games', (req, res) => {
+        const games = Array.from(improvedLobbyManager.games.entries()).map(([id, game]) => ({
+            id: id,
+            name: game.name,
+            players: Array.from(game.players.values()).map(p => p.name),
+            status: game.status,
+            createdAt: game.createdAt
+        }));
+        
+        res.json({
+            totalGames: games.length,
+            games: games,
+            timestamp: new Date().toISOString()
+        });
+    });
+
+    app.get('/debug/db-games', (req, res) => {
+        const games = Array.from(dbGamePlayers.entries()).map(([gameId, playerSet]) => ({
+            gameId: gameId,
+            playerCount: playerSet.size,
+            socketIds: Array.from(playerSet)
+        }));
+        
+        res.json({
+            totalDbGames: games.length,
+            games: games,
+            timestamp: new Date().toISOString()
+        });
+    });
+
+    app.get('/debug/chat-rooms', (req, res) => {
+        const rooms = Array.from(chatRooms.entries()).map(([gameId, chatRoom]) => ({
+            gameId: gameId,
+            messageCount: chatRoom.messages.length,
+            playerCount: chatRoom.players.size,
+            createdAt: chatRoom.createdAt,
+            lastMessage: chatRoom.messages.length > 0 ? chatRoom.messages[chatRoom.messages.length - 1] : null
+        }));
+        
+        res.json({
+            totalChatRooms: rooms.length,
+            rooms: rooms,
+            timestamp: new Date().toISOString()
+        });
+    });
+
+    app.get('/debug/socket-rooms', (req, res) => {
+        const rooms = [];
+        for (const [roomName, room] of io.sockets.adapter.rooms) {
+            if (!roomName.startsWith('socket.io#')) {
+                rooms.push({
+                    name: roomName,
+                    playerCount: room.size,
+                    socketIds: Array.from(room)
+                });
+            }
+        }
+        
+        res.json({
+            totalRooms: rooms.length,
+            rooms: rooms,
+            timestamp: new Date().toISOString()
+        });
+    });
+
+    app.post('/debug/broadcast-test/:gameId', async (req, res) => {
+        try {
+            const gameId = parseInt(req.params.gameId);
+            const message = req.body.message || 'Test broadcast message';
+            
+            io.to(`db_game_${gameId}`).emit('debug_broadcast', {
+                message: message,
+                timestamp: new Date().toISOString(),
+                gameId: gameId
+            });
+            
+            res.json({
+                success: true,
+                message: `Broadcast sent to game ${gameId}`,
+                roomName: `db_game_${gameId}`
+            });
+        } catch (error) {
+            res.status(500).json({
+                success: false,
+                error: error.message
+            });
+        }
+    });
+
+    app.post('/debug/force-sync/:gameId', async (req, res) => {
+        try {
+            const gameId = parseInt(req.params.gameId);
+            await broadcastRaceSelectionSync(gameId);
+            
+            res.json({
+                success: true,
+                message: `Race selection sync forced for game ${gameId}`
+            });
+        } catch (error) {
+            res.status(500).json({
+                success: false,
+                error: error.message
+            });
+        }
+    });
+
+    app.post('/debug/send-chat-message/:gameId', (req, res) => {
+        try {
+            const gameId = parseInt(req.params.gameId);
+            const message = req.body.message || 'Test chat message from admin';
+            const playerName = req.body.playerName || 'System';
+            
+            // Add message to chat room
+            const chatMessage = addChatMessage(gameId, playerName, message, 'admin');
+            
+            // Broadcast to chat room
+            io.to(`chat_${gameId}`).emit('chat_message', {
+                playerName: playerName,
+                message: message,
+                timestamp: chatMessage.timestamp,
+                playerId: 'admin'
+            });
+            
+            res.json({
+                success: true,
+                message: `Chat message sent to game ${gameId}`,
+                chatMessage: chatMessage
+            });
+        } catch (error) {
+            res.status(500).json({
+                success: false,
+                error: error.message
+            });
+        }
+    });
+}
+
+// Graceful shutdown handling
+process.on('SIGTERM', () => {
+    console.log('SIGTERM received, shutting down gracefully...');
+    
+    // Close server
+    server.close(() => {
+        console.log('HTTP server closed');
+        
+        // Close database connections
+        if (db && db.pool) {
+            db.pool.end(() => {
+                console.log('Database pool closed');
+                process.exit(0);
+            });
+        } else {
+            process.exit(0);
+        }
+    });
+
+    // Force close after 30 seconds
+    setTimeout(() => {
+        console.error('Could not close connections in time, forcefully shutting down');
+        process.exit(1);
+    }, 30000);
+});
+
+process.on('SIGINT', () => {
+    console.log('SIGINT received, shutting down gracefully...');
+    
+    // Notify all connected clients about shutdown
+    io.emit('server_shutdown', {
+        message: 'Server wird heruntergefahren. Bitte speichere deinen Fortschritt.',
+        timestamp: new Date().toISOString()
+    });
+    
+    // Give clients time to receive the message
+    setTimeout(() => {
+        server.close(() => {
+            console.log('HTTP server closed');
+            process.exit(0);
+        });
+    }, 2000);
+});
+
+// Error Handling
+app.use((err, req, res, next) => {
+    console.error('Express error:', err.stack);
+    res.status(500).json({ 
+        error: 'Interner Serverfehler',
+        timestamp: new Date().toISOString(),
+        requestId: req.headers['x-request-id'] || 'unknown'
+    });
+});
+
+// 404 Handler
+app.use((req, res) => {
+    res.status(404).json({
+        error: 'Route nicht gefunden',
+        path: req.path,
+        method: req.method,
+        timestamp: new Date().toISOString()
+    });
+});
+
+// Global error handlers
+process.on('uncaughtException', (error) => {
+    console.error('Uncaught Exception:', error);
+    // In production, you might want to restart the process
+    if (process.env.NODE_ENV === 'production') {
+        console.error('Uncaught exception in production, exiting...');
+        process.exit(1);
+    }
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+    // In production, you might want to restart the process
+    if (process.env.NODE_ENV === 'production') {
+        console.error('Unhandled rejection in production, exiting...');
+        process.exit(1);
+    }
+});
+
+// Start Server
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+    console.log(`🚀 Server läuft auf Port ${PORT}`);
+    console.log(`📱 Spiel verfügbar unter: http://localhost:${PORT}`);
+    console.log(`💾 Memory-basierte Lobby aktiviert`);
+    console.log(`🎯 Datenbank für persistente Spiele bereit`);
+    console.log(`🔄 Erweiterte Socket.IO-Konfiguration aktiv`);
+    console.log(`⚡ Heartbeat-System aktiviert`);
+    console.log(`💬 Chat-System aktiviert`);
+    console.log(`🔧 Debug-Endpoints verfügbar: ${process.env.NODE_ENV === 'development'}`);
+    console.log(`🏥 Health-Check verfügbar unter: /health`);
+    
+    if (process.env.NODE_ENV === 'development') {
+        console.log(`🐛 Debug-Endpoints:`);
+        console.log(`   - GET /debug/memory-games`);
+        console.log(`   - GET /debug/db-games`);
+        console.log(`   - GET /debug/chat-rooms`);
+        console.log(`   - GET /debug/socket-rooms`);
+        console.log(`   - POST /debug/broadcast-test/:gameId`);
+        console.log(`   - POST /debug/force-sync/:gameId`);
+        console.log(`   - POST /debug/send-chat-message/:gameId`);
+        console.log(`   - GET /api/game/:gameId/chat`);
+    }
+    
+    console.log(`\n📋 Verfügbare API Endpoints:`);
+    console.log(`   - GET /api/test`);
+    console.log(`   - GET /api/games`);
+    console.log(`   - GET /api/races`);
+    console.log(`   - GET /api/game/:gameId/race-selections`);
+    console.log(`   - GET /api/game/:gameId/status`);
+    console.log(`   - GET /api/game/:gameId/chat`);
+    console.log(`   - GET /health`);
+    
+    console.log(`\n🎮 Socket.IO Events:`);
+    console.log(`   Lobby: create_game, join_game, player_ready, start_game, leave_game`);
+    console.log(`   Race: select_race, deselect_race, get_race_selections`);
+    console.log(`   Chat: join_chat_room, send_chat_message, leave_chat_room`);
+    console.log(`   Game: join_db_game_room, get_game_state, player_move, end_turn`);
+    console.log(`   System: heartbeat, rejoin_db_game_room, request_race_selection_sync`);
+    
+    if (process.env.NODE_ENV === 'development') {
+        console.log(`   Admin: admin_get_game_stats, admin_reset_race_selections, admin_clear_chat`);
+    }
+    
+    console.log(`\n🌟 Features aktiviert:`);
+    console.log(`   ✅ Multiplayer Lobby System`);
+    console.log(`   ✅ Race Selection mit Datenbank-Persistierung`);
+    console.log(`   ✅ Live Chat während Race Selection`);
+    console.log(`   ✅ Automatische Reconnection & Sync`);
+    console.log(`   ✅ Heartbeat-basierte Verbindungsüberwachung`);
+    console.log(`   ✅ Memory-effiziente Cleanup-Systeme`);
+    console.log(`   ✅ Umfassende Error Handling`);
+    console.log(`   ✅ Production-ready Health Monitoring`);
+    
+    console.log(`\n🎯 Server bereit für Strategiespiel-Action! 🏰⚔️`);
+    console.log(`📡 Alle Systeme online und betriebsbereit!`);
+    console.log(`🔗 Verbindung zur Datenbank etabliert`);
+    console.log(`🎲 Zufallsgenerierung für Karten aktiviert`);
+    console.log(`⚡ Echtzeit-Multiplayer funktionsfähig`);
+    console.log(`💾 Spieldaten werden persistent gespeichert`);
+    console.log(`\n🔥 Ready to conquer the battlefield! 🔥`);
+});
+

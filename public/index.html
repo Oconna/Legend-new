@@ -22,8 +22,8 @@
                 </div>
             </section>
 
-            <!-- Lobby Sections Grid -->
-            <div class="lobby-sections">
+            <!-- Game List Section -->
+            <section id="gameListSection" class="lobby-sections">
                 <!-- Game Creation Section -->
                 <section class="create-game-section">
                     <h2>Neues Spiel erstellen</h2>
@@ -68,38 +68,84 @@
                             <div class="loading">Lade Spiele...</div>
                         </div>
                     </div>
-                    <button id="refreshGamesBtn" class="btn btn-secondary">Spiele aktualisieren</button>
+                    <div class="games-actions">
+                        <button id="joinGameBtn" class="btn btn-success" disabled>Spiel beitreten</button>
+                        <button id="refreshGamesBtn" class="btn btn-secondary">Spiele aktualisieren</button>
+                    </div>
                 </section>
-            </div>
+            </section>
 
             <!-- Current Game Lobby Section (shown when in a game) -->
-            <section id="currentGameSection" class="current-game-section" style="display: none;">
+            <section id="gameLobbySection" class="current-game-section" style="display: none;">
                 <h2>Aktuelle Spiellobby</h2>
-                <div class="current-game-info">
-                    <div class="game-header">
-                        <h3 id="currentGameName">Spielname</h3>
-                        <div class="game-meta">
-                            <span>Spieler: <span id="currentGamePlayerCount">0</span>/<span id="currentGameMaxPlayers">0</span></span>
-                            <span>Karte: <span id="currentGameMapSize">0</span>x<span id="currentGameMapSizeY">0</span></span>
+                <div class="current-game-container">
+                    <!-- Left side: Game Lobby Info -->
+                    <div class="game-lobby-left">
+                        <div class="current-game-info">
+                            <div class="game-header">
+                                <h3 id="currentGameName">Spielname</h3>
+                                <div class="game-meta">
+                                    <span>Spieler: <span id="currentGamePlayerCount">0</span>/<span id="currentGameMaxPlayers">0</span></span>
+                                    <span>Karte: <span id="currentGameMapSize">0</span>x<span id="currentGameMapSizeY">0</span></span>
+                                </div>
+                            </div>
+                            
+                            <div class="players-lobby">
+                                <h4>Spieler in der Lobby:</h4>
+                                <div id="gameLobbyPlayersList" class="players-lobby-list">
+                                    <!-- Players will be populated here -->
+                                </div>
+                            </div>
+                            
+                            <div class="lobby-controls">
+                                <button id="readyBtn" class="btn btn-success">Bereit</button>
+                                <button id="startGameBtn" class="btn btn-primary" style="display: none;">Spiel starten</button>
+                                <button id="leaveLobbyBtn" class="btn btn-danger">Lobby verlassen</button>
+                            </div>
+                            
+                            <div class="lobby-status">
+                                <p id="lobbyStatusText">Warte auf andere Spieler...</p>
+                                <p id="readyStatusText">Bereit: <span id="readyCount">0</span>/<span id="totalPlayers">0</span></p>
+                            </div>
                         </div>
                     </div>
-                    
-                    <div class="players-lobby">
-                        <h4>Spieler in der Lobby:</h4>
-                        <ul id="currentGamePlayersList" class="players-lobby-list">
-                            <!-- Players will be populated here -->
-                        </ul>
-                    </div>
-                    
-                    <div class="lobby-controls">
-                        <button id="readyBtn" class="btn btn-success">Bereit</button>
-                        <button id="startGameBtn" class="btn btn-primary" style="display: none;">Spiel starten</button>
-                        <button id="leaveLobbyBtn" class="btn btn-danger">Lobby verlassen</button>
-                    </div>
-                    
-                    <div class="lobby-status">
-                        <p id="lobbyStatusText">Warte auf andere Spieler...</p>
-                        <p id="readyStatusText">Bereit: <span id="readyCount">0</span>/<span id="totalPlayers">0</span></p>
+
+                    <!-- Right side: Lobby Chat -->
+                    <div class="game-lobby-right">
+                        <div id="lobbyChat" class="lobby-chat">
+                            <div class="chat-header">
+                                <h4>💬 Lobby Chat</h4>
+                                <span class="chat-info">
+                                    <span id="lobbyChatPlayerCount">0</span> Spieler online
+                                </span>
+                            </div>
+                            <div class="chat-messages-container">
+                                <div id="lobbyChatMessages" class="chat-messages">
+                                    <!-- Chat messages will be displayed here -->
+                                </div>
+                            </div>
+                            <div class="chat-input-container">
+                                <div class="chat-input-wrapper">
+                                    <textarea 
+                                        id="lobbyChatMessageInput" 
+                                        class="chat-input" 
+                                        placeholder="Schreibe eine Nachricht..."
+                                        maxlength="500"
+                                        rows="1"></textarea>
+                                    <button id="lobbyChatSendButton" class="chat-send-btn" title="Nachricht senden">
+                                        📤
+                                    </button>
+                                </div>
+                                <div class="chat-controls">
+                                    <small class="char-count">
+                                        <span id="lobbyChatCharCount">0</span>/500
+                                    </small>
+                                    <small class="chat-hint">
+                                        Enter zum Senden
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </section>
@@ -147,7 +193,7 @@
 
                         <!-- Right side: Chat -->
                         <div class="chat-panel">
-                            <div id="raceSelectionChat" class="race-chat" style="display: none;">
+                            <div id="raceSelectionChat" class="race-chat">
                                 <div class="chat-header">
                                     <h4>💬 Chat</h4>
                                     <span class="chat-info">
@@ -187,8 +233,109 @@
             </div>
         </div>
 
+        <!-- Create Game Modal -->
+        <div id="createGameModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Neues Spiel erstellen</h3>
+                    <span class="close">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <form id="createGameForm">
+                        <div class="form-group">
+                            <label for="gameNameInput">Spielname:</label>
+                            <input type="text" id="gameNameInput" required maxlength="50" placeholder="Mein Strategiespiel">
+                        </div>
+                        <div class="form-group">
+                            <label for="maxPlayersInput">Maximale Spieler:</label>
+                            <select id="maxPlayersInput" required>
+                                <option value="2">2 Spieler</option>
+                                <option value="3">3 Spieler</option>
+                                <option value="4" selected>4 Spieler</option>
+                                <option value="5">5 Spieler</option>
+                                <option value="6">6 Spieler</option>
+                                <option value="7">7 Spieler</option>
+                                <option value="8">8 Spieler</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="mapSizeInput">Kartengröße:</label>
+                            <select id="mapSizeInput" required>
+                                <option value="20">Klein (20x20)</option>
+                                <option value="30" selected>Mittel (30x30)</option>
+                                <option value="50">Groß (50x50)</option>
+                                <option value="100">Riesig (100x100)</option>
+                            </select>
+                        </div>
+                        <div class="modal-actions">
+                            <button type="submit" id="confirmCreateGameBtn" class="btn btn-primary">Spiel erstellen</button>
+                            <button type="button" class="btn btn-secondary cancel-btn">Abbrechen</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Join Game Modal -->
+        <div id="joinGameModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Spiel beitreten</h3>
+                    <span class="close">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <div id="joinGameInfo">
+                        <p>Möchtest du diesem Spiel beitreten?</p>
+                        <div id="joinGameDetails">
+                            <!-- Game details will be shown here -->
+                        </div>
+                        <div class="modal-actions">
+                            <button id="confirmJoinGameBtn" class="btn btn-primary">Beitreten</button>
+                            <button class="btn btn-secondary cancel-btn">Abbrechen</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Loading Modal -->
+        <div id="loadingModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-body">
+                    <div class="loading-content">
+                        <div class="spinner"></div>
+                        <h3 id="loadingTitle">Lade...</h3>
+                        <p id="loadingMessage">Bitte warten...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Error Modal -->
+        <div id="errorModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>❌ Fehler</h3>
+                    <span class="close">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <div id="errorMessage">
+                        <p>Ein Fehler ist aufgetreten.</p>
+                    </div>
+                    <div class="modal-actions">
+                        <button class="btn btn-primary">OK</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Notifications -->
         <div id="notifications" class="notifications"></div>
+
+        <!-- Connection Status -->
+        <div id="connectionStatus" class="connection-status">
+            <span id="connectionStatusText">Verbinde...</span>
+        </div>
     </div>
 
     <!-- Scripts -->

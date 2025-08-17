@@ -232,70 +232,8 @@
             </div>
         </div>
 
-        <!-- Create Game Modal -->
-        <div id="createGameModal" class="modal">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h3>Neues Spiel erstellen</h3>
-                    <span class="close">&times;</span>
-                </div>
-                <div class="modal-body">
-                    <form id="createGameForm">
-                        <div class="form-group">
-                            <label for="gameNameInput">Spielname:</label>
-                            <input type="text" id="gameNameInput" required maxlength="50" placeholder="Mein Strategiespiel">
-                        </div>
-                        <div class="form-group">
-                            <label for="maxPlayersInput">Maximale Spieler:</label>
-                            <select id="maxPlayersInput" required>
-                                <option value="2">2 Spieler</option>
-                                <option value="3">3 Spieler</option>
-                                <option value="4" selected>4 Spieler</option>
-                                <option value="5">5 Spieler</option>
-                                <option value="6">6 Spieler</option>
-                                <option value="7">7 Spieler</option>
-                                <option value="8">8 Spieler</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label for="mapSizeInput">Kartengröße:</label>
-                            <select id="mapSizeInput" required>
-                                <option value="20">Klein (20x20)</option>
-                                <option value="30" selected>Mittel (30x30)</option>
-                                <option value="50">Groß (50x50)</option>
-                                <option value="100">Riesig (100x100)</option>
-                            </select>
-                        </div>
-                        <div class="modal-actions">
-                            <button type="submit" id="confirmCreateGameBtn" class="btn btn-primary">Spiel erstellen</button>
-                            <button type="button" class="btn btn-secondary cancel-btn">Abbrechen</button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </div>
-
-        <!-- Join Game Modal -->
-        <div id="joinGameModal" class="modal">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h3>Spiel beitreten</h3>
-                    <span class="close">&times;</span>
-                </div>
-                <div class="modal-body">
-                    <div id="joinGameInfo">
-                        <p>Möchtest du diesem Spiel beitreten?</p>
-                        <div id="joinGameDetails">
-                            <!-- Game details will be shown here -->
-                        </div>
-                        <div class="modal-actions">
-                            <button id="confirmJoinGameBtn" class="btn btn-primary">Beitreten</button>
-                            <button class="btn btn-secondary cancel-btn">Abbrechen</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
+        <!-- Create Game Modal - ENTFERNT -->
+        <!-- Join Game Modal - ENTFERNT -->
 
         <!-- Loading Modal -->
         <div id="loadingModal" class="modal">

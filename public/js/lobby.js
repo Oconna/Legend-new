@@ -160,12 +160,7 @@ class StrategyGameClient {
         // Game creation
         const createGameBtn = document.getElementById('createGameBtn');
         if (createGameBtn) {
-            createGameBtn.addEventListener('click', () => this.showCreateGameModal());
-        }
-
-        const confirmCreateGameBtn = document.getElementById('confirmCreateGameBtn');
-        if (confirmCreateGameBtn) {
-            confirmCreateGameBtn.addEventListener('click', () => this.createGame());
+        createGameBtn.addEventListener('click', () => this.createGameDirectly());;
         }
 
         // Game lobby
@@ -183,12 +178,6 @@ class StrategyGameClient {
         if (startGameBtn) {
             startGameBtn.addEventListener('click', () => this.startGame());
         }
-
-        // Modal close buttons
-        const modalCloseButtons = document.querySelectorAll('.modal .close, .modal .cancel-btn');
-        modalCloseButtons.forEach(btn => {
-            btn.addEventListener('click', () => this.closeModals());
-        });
 
         // Race selection
         const confirmRaceBtn = document.getElementById('confirmRaceBtn');
@@ -575,55 +564,54 @@ updateUIState() {
         this.socket.emit('get_games');
     }
 
-    // Create Game Modal anzeigen
-    showCreateGameModal() {
-        if (!this.playerName) {
-            showNotification('Bitte gib zuerst einen Spielernamen ein', 'error');
-            return;
-        }
-        
-        const modal = document.getElementById('createGameModal');
-        if (modal) {
-            modal.style.display = 'block';
-        }
+	
+	// Neue Methode in StrategyGameClient Klasse
+createGameDirectly() {
+    // Validierung
+    if (!this.playerName) {
+        showNotification('Bitte gib zuerst einen Spielernamen ein', 'error');
+        return;
     }
-
+    
+    // Werte direkt aus den Hauptformular-Feldern lesen
+    const gameNameInput = document.getElementById('gameName');
+    const maxPlayersInput = document.getElementById('maxPlayers');
+    const mapSizeInput = document.getElementById('mapSize');
+    
+    if (!gameNameInput || !maxPlayersInput || !mapSizeInput) {
+        showNotification('Fehler: Eingabefelder nicht gefunden', 'error');
+        return;
+    }
+    
+    const gameName = gameNameInput.value.trim();
+    const maxPlayers = parseInt(maxPlayersInput.value);
+    const mapSize = parseInt(mapSizeInput.value);
+    
+    // Validierung der Eingaben
+    if (!gameName) {
+        showNotification('Bitte gib einen Spielnamen ein', 'error');
+        gameNameInput.focus();
+        return;
+    }
+    
+    if (maxPlayers < 2 || maxPlayers > 8) {
+        showNotification('Spieleranzahl muss zwischen 2 und 8 liegen', 'error');
+        return;
+    }
+    
+    console.log('Creating game directly:', { gameName, maxPlayers, mapSize, playerName: this.playerName });
+    
     // Spiel erstellen
-    createGame() {
-        const gameNameInput = document.getElementById('gameNameInput');
-        const maxPlayersInput = document.getElementById('maxPlayersInput');
-        const mapSizeInput = document.getElementById('mapSizeInput');
-        
-        if (!gameNameInput || !maxPlayersInput || !mapSizeInput) {
-            showNotification('Fehler: Eingabefelder nicht gefunden', 'error');
-            return;
-        }
-        
-        const gameName = gameNameInput.value.trim();
-        const maxPlayers = parseInt(maxPlayersInput.value);
-        const mapSize = parseInt(mapSizeInput.value);
-        
-        if (!gameName) {
-            showNotification('Bitte gib einen Spielnamen ein', 'error');
-            return;
-        }
-        
-        if (maxPlayers < 2 || maxPlayers > 8) {
-            showNotification('Spieleranzahl muss zwischen 2 und 8 liegen', 'error');
-            return;
-        }
-        
-        console.log('Creating game:', { gameName, maxPlayers, mapSize });
-        
-        this.socket.emit('create_game', {
-            gameName: gameName,
-            playerName: this.playerName,
-            maxPlayers: maxPlayers,
-            mapSize: mapSize
-        });
-        
-        this.closeModals();
-    }
+    this.socket.emit('create_game', {
+        gameName: gameName,
+        playerName: this.playerName,
+        maxPlayers: maxPlayers,
+        mapSize: mapSize
+    });
+    
+    // Loading-Anzeige
+    showNotification('Spiel wird erstellt...', 'info');
+}
 
 
     // Aktuelles Spiel verlassen

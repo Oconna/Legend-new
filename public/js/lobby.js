@@ -175,12 +175,6 @@ class LobbyManager {
             // Update local tracking of player selections (not confirmed yet)
             const existingStatus = this.playersRaceStatus.get(data.playerName);
             
-            // Clear any previous race selection for this player in UI
-            if (existingStatus && existingStatus.selectedRaceId && existingStatus.selectedRaceId !== data.raceId) {
-                console.log(`Player ${data.playerName} changed race from ${existingStatus.selectedRaceId} to ${data.raceId}`);
-                this.clearPlayerRaceFromUI(data.playerName, existingStatus.selectedRaceId);
-            }
-            
             this.playersRaceStatus.set(data.playerName, {
                 playerName: data.playerName,
                 selectedRaceId: data.raceId,
@@ -192,16 +186,11 @@ class LobbyManager {
                 showNotification(`${data.playerName} wählt ${data.raceName}...`, 'info');
             }
             
+            // Only update player status display, not race cards UI for unconfirmed selections
             this.updatePlayersRaceStatus();
         });
 
         this.socket.on('player_race_confirmed', (data) => {
-            // Clear any previous race selection for this player first
-            const existingStatus = this.playersRaceStatus.get(data.playerName);
-            if (existingStatus && existingStatus.selectedRaceId && existingStatus.selectedRaceId !== data.raceId) {
-                this.clearPlayerRaceFromUI(data.playerName, existingStatus.selectedRaceId);
-            }
-            
             // Update player status to confirmed
             const playerStatus = this.playersRaceStatus.get(data.playerName);
             if (playerStatus) {
@@ -213,7 +202,7 @@ class LobbyManager {
             if (data.playerName !== this.playerName) {
                 showNotification(`${data.playerName} hat ${data.raceName} bestätigt`, 'success');
                 
-                // Mark race as unavailable for other players
+                // Only mark race as unavailable when it's confirmed
                 this.updateRaceSelection(data.raceId, data.playerName);
             }
             
@@ -222,14 +211,14 @@ class LobbyManager {
         });
 
         this.socket.on('player_race_deselected', (data) => {
-            // Get the player's previous race selection to clear it from UI
-            const playerStatus = this.playersRaceStatus.get(data.playerName);
-            if (playerStatus && playerStatus.selectedRaceId) {
-                this.clearPlayerRaceFromUI(data.playerName, playerStatus.selectedRaceId);
-            }
-            
             // Update local tracking - player deselected race
+            const playerStatus = this.playersRaceStatus.get(data.playerName);
             if (playerStatus) {
+                // Only clear if it was confirmed (UI cleanup needed)
+                if (playerStatus.confirmed && playerStatus.selectedRaceId) {
+                    this.clearPlayerRaceFromUI(data.playerName, playerStatus.selectedRaceId);
+                }
+                
                 playerStatus.selectedRaceId = null;
                 playerStatus.confirmed = false;
                 playerStatus.raceName = null;
@@ -770,27 +759,23 @@ class LobbyManager {
         
         // Don't allow selection if already confirmed
         if (this.raceConfirmed) {
-            showNotification('Du hast bereits eine Rasse bestätigt', 'warning');
+            showNotification('Du hast bereits eine Rasse bestätigt. Klicke auf "Rasse ändern" um eine neue zu wählen.', 'warning');
             return;
         }
         
         // Check if race already confirmed by someone else
         const raceCard = document.querySelector(`[data-race-id="${raceId}"]`);
-        if (raceCard && (raceCard.classList.contains('unavailable') || raceCard.classList.contains('confirmed'))) {
+        if (raceCard && raceCard.classList.contains('unavailable')) {
             showNotification('Diese Rasse wurde bereits bestätigt', 'warning');
             return;
         }
 
-        // If player had a different race selected before, clear it first
-        if (this.selectedRaceId && this.selectedRaceId !== raceId) {
-            this.clearPlayerRaceFromUI(this.playerName, this.selectedRaceId);
-            this.notifyRaceDeselection();
-        }
-
-        // Update UI to show selection (not confirmed yet)
+        // Clear previous selection visually (no server notification needed for unconfirmed changes)
         document.querySelectorAll('.race-card').forEach(card => {
             card.classList.remove('selected');
         });
+        
+        // Update UI to show new selection
         if (raceCard) {
             raceCard.classList.add('selected');
         }
@@ -975,14 +960,14 @@ class LobbyManager {
         const playersArray = Array.from(this.playersRaceStatus.values());
         
         statusContainer.innerHTML = playersArray.map(player => {
-            let statusText = 'Wählt...';
+            let statusText = 'Wählt noch...';
             let statusClass = '';
             
             if (player.confirmed) {
-                statusText = `✅ ${player.raceName}`;
+                statusText = `✅ ${player.raceName} (bestätigt)`;
                 statusClass = 'confirmed';
             } else if (player.selectedRaceId) {
-                statusText = `🤔 ${player.raceName} (nicht bestätigt)`;
+                statusText = `🤔 ${player.raceName} (noch nicht bestätigt)`;
                 statusClass = 'selecting';
             }
             

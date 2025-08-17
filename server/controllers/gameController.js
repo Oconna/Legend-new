@@ -42,7 +42,7 @@ class GameController {
 
             // Prüfe ob der Spieler existiert
             const player = await db.query(
-                'SELECT id, player_name, race_id FROM game_players WHERE game_id = ? AND player_name = ?',
+                'SELECT id, player_name, race_id, race_confirmed FROM game_players WHERE game_id = ? AND player_name = ?',
                 [gameId, playerName]
             );
 
@@ -50,7 +50,16 @@ class GameController {
                 return { success: false, message: 'Spieler nicht in diesem Spiel gefunden' };
             }
 
-            // Wenn nur Auswahl (nicht Bestätigung), prüfe nicht ob Rasse bereits gewählt wurde
+            // Wenn Bestätigung: Prüfe ob bereits bestätigt
+            if (confirmed && player[0].race_confirmed) {
+                return { success: false, message: 'Du hast bereits eine Rasse bestätigt' };
+            }
+
+            // Wenn nur Auswahl: Erlaube Änderung auch wenn bereits eine Auswahl existiert (aber nicht bestätigt)
+            if (!confirmed && player[0].race_confirmed) {
+                return { success: false, message: 'Bestätigte Rassen können nicht mehr geändert werden' };
+            }
+
             if (confirmed) {
                 // Bei Bestätigung: Prüfe ob die Rasse bereits von einem anderen Spieler bestätigt wurde
                 const existingConfirmedRace = await db.query(
@@ -73,7 +82,7 @@ class GameController {
 
                 console.log(`✅ Race ${race[0].name} confirmed by player ${playerName}`);
             } else {
-                // Nur Auswahl speichern (nicht bestätigt)
+                // Nur Auswahl speichern (nicht bestätigt) - erlaube Überschreibung
                 await db.query(
                     'UPDATE game_players SET race_id = ?, race_confirmed = false WHERE game_id = ? AND player_name = ?',
                     [raceId, gameId, playerName]

@@ -251,32 +251,59 @@ io.on('connection', (socket) => {
 
     socket.on('start_game', async (data) => {
         try {
+            console.log('🎮 Starting game request:', data);
             const result = await improvedLobbyManager.startGame(socket.id, db);
             
             if (result.success) {
                 const playerData = improvedLobbyManager.players.get(socket.id);
                 
                 if (playerData) {
+                    console.log(`✅ Game started successfully, DB ID: ${result.dbGameId}`);
+                    
                     // Start race selection phase
                     await gameController.startRaceSelection(result.dbGameId);
                     
                     // Move all players to database game room
                     const memoryGame = improvedLobbyManager.games.get(playerData.gameId);
                     if (memoryGame) {
+                        console.log(`📋 Moving ${memoryGame.players.size} players to DB game room`);
+                        
                         for (const [socketId, player] of memoryGame.players) {
                             const playerSocket = io.sockets.sockets.get(socketId);
                             if (playerSocket) {
                                 playerSocket.join(`db_game_${result.dbGameId}`);
                                 playerSocket.leave(`game_${playerData.gameId}`);
+                                
+                                // Send individual confirmation with dbGameId
+                                playerSocket.emit('db_game_created', {
+                                    dbGameId: result.dbGameId,
+                                    memoryGameId: playerData.gameId,
+                                    playerName: player.name
+                                });
                             }
                         }
                     }
                     
-                    // Notify all players in the game
-                    io.to(`db_game_${result.dbGameId}`).emit('start_race_selection', {
-                        message: 'Spiel gestartet! Rassenwahl beginnt...',
-                        dbGameId: result.dbGameId
-                    });
+                    // Small delay to ensure all players are in the room
+                    setTimeout(() => {
+                        // Notify all players in the game to start race selection
+                        io.to(`db_game_${result.dbGameId}`).emit('start_race_selection', {
+                            message: 'Spiel gestartet! Rassenwahl beginnt...',
+                            dbGameId: result.dbGameId,
+                            players: result.players
+                        });
+                        
+                        // Send individual messages to ensure each player gets the dbGameId
+                        for (const player of result.players) {
+                            const playerSocket = io.sockets.sockets.get(player.socketId);
+                            if (playerSocket) {
+                                playerSocket.emit('db_game_id_assigned', {
+                                    dbGameId: result.dbGameId,
+                                    playerName: player.name
+                                });
+                            }
+                        }
+                    }, 1000); // 1 second delay
                     
                     // Clean up memory game since it's now in database
                     improvedLobbyManager.games.delete(playerData.gameId);

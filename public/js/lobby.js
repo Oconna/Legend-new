@@ -92,10 +92,37 @@ class LobbyManager {
             showNotification(`${data.playerName} ist ${data.ready ? 'bereit' : 'nicht bereit'}`, 'info');
         });
 
-        this.socket.on('start_race_selection', (data) => {
+        this.socket.on('db_game_created', (data) => {
+            console.log('DB Game created event received:', data);
             this.gameDbId = data.dbGameId;
+            this.currentGameId = null; // Clear memory game ID
+            
+            saveToLocalStorage('currentDbGameId', this.gameDbId);
+            saveToLocalStorage('currentGameId', null);
+            
+            showNotification(`Spiel in Datenbank erstellt (ID: ${data.dbGameId})`, 'info');
+        });
+
+        this.socket.on('start_race_selection', (data) => {
+            console.log('Starting race selection with data:', data);
+            this.gameDbId = data.dbGameId;
+            
+            // Save to localStorage as backup
+            saveToLocalStorage('currentDbGameId', this.gameDbId);
+            
             this.hideCurrentGameLobby();
             this.startRaceSelection();
+        });
+
+        this.socket.on('db_game_id_assigned', (data) => {
+            console.log('DB Game ID assigned:', data);
+            this.gameDbId = data.dbGameId;
+            saveToLocalStorage('currentDbGameId', this.gameDbId);
+            
+            // If race selection modal is already open, update the ID
+            if (document.getElementById('raceSelectionModal').style.display === 'block') {
+                showNotification(`Spiel-ID erhalten: ${data.dbGameId}`, 'info');
+            }
         });
 
         this.socket.on('race_selection_confirmed', (data) => {
@@ -536,8 +563,30 @@ class LobbyManager {
     }
 
     startRaceSelection() {
+        console.log('Starting race selection modal');
+        console.log('Available races:', this.availableRaces.length);
+        console.log('Current gameDbId:', this.gameDbId);
+        console.log('Current playerName:', this.playerName);
+        
         this.setupRaceSelectionModal();
         showModal('raceSelectionModal');
+        
+        // Add debug info to modal if needed
+        const modal = document.getElementById('raceSelectionModal');
+        if (modal && !this.gameDbId) {
+            const debugInfo = document.createElement('div');
+            debugInfo.style.cssText = 'background: #f39c12; color: white; padding: 0.5rem; margin-bottom: 1rem; border-radius: 4px;';
+            debugInfo.innerHTML = `
+                <strong>⚠️ Debug Info:</strong><br>
+                Spiel-ID: ${this.gameDbId || 'FEHLT'}<br>
+                Memory Game ID: ${this.currentGameId || 'FEHLT'}<br>
+                Spieler: ${this.playerName || 'FEHLT'}
+            `;
+            const modalBody = modal.querySelector('.modal-body');
+            if (modalBody) {
+                modalBody.insertBefore(debugInfo, modalBody.firstChild);
+            }
+        }
     }
 
     setupRaceSelectionModal() {
@@ -565,8 +614,37 @@ class LobbyManager {
     }
 
     selectRace(raceId) {
-        if (!this.gameDbId) {
+        console.log('Attempting to select race:', raceId);
+        console.log('Current gameDbId:', this.gameDbId);
+        console.log('Current playerName:', this.playerName);
+        
+        // Try to get gameDbId from multiple sources
+        let gameDbId = this.gameDbId;
+        
+        if (!gameDbId) {
+            // Try localStorage backup
+            gameDbId = loadFromLocalStorage('currentDbGameId', null);
+            console.log('Trying gameDbId from localStorage:', gameDbId);
+        }
+        
+        if (!gameDbId) {
+            // Try to extract from URL if we're on game page
+            const urlGameId = getGameIdFromUrl();
+            if (urlGameId) {
+                gameDbId = urlGameId;
+                console.log('Trying gameDbId from URL:', gameDbId);
+            }
+        }
+        
+        if (!gameDbId) {
             showNotification('Spiel-ID fehlt. Bitte versuche es erneut.', 'error');
+            console.error('No gameDbId available for race selection');
+            return;
+        }
+        
+        if (!this.playerName) {
+            showNotification('Spielername fehlt. Bitte lade die Seite neu.', 'error');
+            console.error('No playerName available for race selection');
             return;
         }
 
@@ -577,7 +655,7 @@ class LobbyManager {
             return;
         }
 
-        // Update UI to show selection
+        // Update UI to show selection (optimistic update)
         document.querySelectorAll('.race-card').forEach(card => {
             card.classList.remove('selected');
         });
@@ -587,9 +665,15 @@ class LobbyManager {
 
         this.selectedRaceId = raceId;
 
+        console.log('Sending race selection:', {
+            gameId: gameDbId,
+            playerName: this.playerName,
+            raceId: raceId
+        });
+
         // Send selection to server
         this.socket.emit('select_race', {
-            gameId: this.gameDbId,
+            gameId: gameDbId,
             playerName: this.playerName,
             raceId: raceId
         });
@@ -605,6 +689,7 @@ class LobbyManager {
                     <p style="color: ${selectedRace.color_hex}; font-weight: bold;">
                         Deine Farbe: ${selectedRace.color_hex}
                     </p>
+                    <small>Warte auf Serverbestätigung...</small>
                 `;
             }
         }

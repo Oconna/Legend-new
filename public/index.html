@@ -68,6 +68,38 @@
                 </div>
                 <button id="refreshGamesBtn" class="btn btn-secondary">Spiele aktualisieren</button>
             </section>
+
+            <!-- Current Game Lobby Section (shown when in a game) -->
+            <section id="currentGameSection" class="current-game-section" style="display: none;">
+                <h2>Aktuelle Spiellobby</h2>
+                <div class="current-game-info">
+                    <div class="game-header">
+                        <h3 id="currentGameName">Spielname</h3>
+                        <div class="game-meta">
+                            <span>Spieler: <span id="currentGamePlayerCount">0</span>/<span id="currentGameMaxPlayers">0</span></span>
+                            <span>Karte: <span id="currentGameMapSize">0</span>x<span id="currentGameMapSizeY">0</span></span>
+                        </div>
+                    </div>
+                    
+                    <div class="players-lobby">
+                        <h4>Spieler in der Lobby:</h4>
+                        <ul id="currentGamePlayersList" class="players-lobby-list">
+                            <!-- Players will be populated here -->
+                        </ul>
+                    </div>
+                    
+                    <div class="lobby-controls">
+                        <button id="readyBtn" class="btn btn-success">Bereit</button>
+                        <button id="startGameBtn" class="btn btn-primary" style="display: none;">Spiel starten</button>
+                        <button id="leaveLobbyBtn" class="btn btn-danger">Lobby verlassen</button>
+                    </div>
+                    
+                    <div class="lobby-status">
+                        <p id="lobbyStatusText">Warte auf andere Spieler...</p>
+                        <p id="readyStatusText">Bereit: <span id="readyCount">0</span>/<span id="totalPlayers">0</span></p>
+                    </div>
+                </div>
+            </section>
         </main>
 
         <!-- Game Lobby Modal -->

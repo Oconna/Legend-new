@@ -684,11 +684,74 @@ input:focus, select:focus {
     cursor: not-allowed;
 }
 
-.lobby-actions {
+/* Current Game Lobby */
+.current-game-section {
+    grid-column: 1 / -1;
+    background: white;
+    padding: 1.5rem;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    margin-bottom: 1rem;
+    border: 3px solid #3498db;
+}
+
+.current-game-info {
+    display: grid;
+    gap: 1rem;
+}
+
+.game-header {
+    text-align: center;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid #ecf0f1;
+}
+
+.game-header h3 {
+    color: #2c3e50;
+    margin-bottom: 0.5rem;
+    font-size: 1.5rem;
+}
+
+.game-meta {
     display: flex;
+    gap: 2rem;
+    justify-content: center;
+    color: #7f8c8d;
+    font-size: 0.9rem;
+}
+
+.players-lobby h4 {
+    color: #2c3e50;
+    margin-bottom: 1rem;
+    font-size: 1.1rem;
+}
+
+.players-lobby-list {
+    padding: 0;
+    margin: 0;
+    list-style: none;
+    display: grid;
     gap: 0.5rem;
-    margin: 1rem 0;
-    flex-wrap: wrap;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.lobby-controls {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    padding: 1rem 0;
+    border-top: 2px solid #ecf0f1;
+}
+
+.lobby-status {
+    text-align: center;
+    padding-top: 1rem;
+}
+
+.lobby-status p {
+    margin: 0.25rem 0;
+    color: #34495e;
 }
 
 /* Responsive Design */

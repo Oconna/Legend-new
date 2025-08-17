@@ -1,4 +1,47 @@
-// Lobby JavaScript - Frontend logic for game lobby
+// Show current game lobby (instead of modal)
+    showCurrentGameLobby(data) {
+        const currentGameSection = document.getElementById('currentGameSection');
+        const currentGameName = document.getElementById('currentGameName');
+        const currentGamePlayerCount = document.getElementById('currentGamePlayerCount');
+        const currentGameMaxPlayers = document.getElementById('currentGameMaxPlayers');
+        const currentGameMapSize = document.getElementById('currentGameMapSize');
+        const currentGameMapSizeY = document.getElementById('currentGameMapSizeY');
+        const startBtn = document.getElementById('startGameBtn');
+        
+        if (currentGameName) currentGameName.textContent = data.gameName;
+        if (currentGamePlayerCount) currentGamePlayerCount.textContent = data.players.length;
+        if (currentGameMaxPlayers) currentGameMaxPlayers.textContent = data.maxPlayers;
+        if (currentGameMapSize) currentGameMapSize.textContent = data.mapSize;
+        if (currentGameMapSizeY) currentGameMapSizeY.textContent = data.mapSize;
+        
+        // Show/hide start button based on host status
+        if (startBtn) {
+            if (this.isHost) {
+                startBtn.style.display = 'inline-block';
+                startBtn.disabled = true; // Initially disabled until all players are ready
+            } else {
+                startBtn.style.display = 'none';
+            }
+        }
+        
+        // Show the section
+        if (currentGameSection) {
+            currentGameSection.style.display = 'block';
+        }
+        
+        // Update players list
+        this.updateCurrentGamePlayersList(data.players);
+    }
+
+    // Hide current game lobby
+    hideCurrentGameLobby() {
+        const currentGameSection = document.getElementById('currentGameSection');
+        if (currentGameSection) {
+            currentGameSection.style.display = 'none';
+        }
+        
+        this.currentGameId = null;
+        this.isReady = false;// Lobby JavaScript - Frontend logic for game lobby
 
 class LobbyManager {
     constructor() {
@@ -9,6 +52,125 @@ class LobbyManager {
         this.currentPlayers = [];
         this.isReady = false;
         this.isHost = false;
+        
+        // Reset ready button
+        const readyBtn = document.getElementById('readyBtn');
+        if (readyBtn) {
+            readyBtn.textContent = 'Bereit';
+            readyBtn.classList.remove('btn-secondary');
+            readyBtn.classList.add('btn-success');
+        }
+        
+        // Reset start button
+        const startBtn = document.getElementById('startGameBtn');
+        if (startBtn) {
+            startBtn.style.display = 'none';
+            startBtn.disabled = true;
+        }
+    }
+
+    // Update current game players list
+    updateCurrentGamePlayersList(players) {
+        const playersList = document.getElementById('currentGamePlayersList');
+        if (!playersList) return;
+        
+        playersList.innerHTML = players.map(player => `
+            <li class="lobby-player-item">
+                <div class="player-info">
+                    <span class="player-name">
+                        ${player.player_name}
+                        ${player.is_host ? ' 👑' : ''}
+                    </span>
+                    <span class="player-status">
+                        ${player.is_ready ? '✅ Bereit' : '⏳ Wartet'}
+                    </span>
+                </div>
+            </li>
+        `).join('');
+        
+        // Update player count
+        const currentGamePlayerCount = document.getElementById('currentGamePlayerCount');
+        const totalPlayers = document.getElementById('totalPlayers');
+        
+        if (currentGamePlayerCount) currentGamePlayerCount.textContent = players.length;
+        if (totalPlayers) totalPlayers.textContent = players.length;
+        
+        this.currentPlayers = players;
+        
+        // Check if current player became host
+        const currentPlayer = players.find(p => p.player_name === this.playerName);
+        if (currentPlayer) {
+            this.isHost = currentPlayer.is_host;
+            
+            // Update start button visibility
+            const startBtn = document.getElementById('startGameBtn');
+            if (startBtn) {
+                if (this.isHost) {
+                    startBtn.style.display = 'inline-block';
+                } else {
+                    startBtn.style.display = 'none';
+                }
+            }
+        }
+    }
+
+    updateReadyStatus(data) {
+        const readyCount = document.getElementById('readyCount');
+        const totalPlayers = document.getElementById('totalPlayers');
+        const lobbyStatusText = document.getElementById('lobbyStatusText');
+        const startBtn = document.getElementById('startGameBtn');
+        
+        if (readyCount) readyCount.textContent = data.readyCount;
+        if (totalPlayers) totalPlayers.textContent = data.totalPlayers;
+        
+        if (data.allReady && this.isHost) {
+            if (lobbyStatusText) lobbyStatusText.textContent = 'Alle Spieler bereit! Du kannst das Spiel starten.';
+            if (startBtn) startBtn.disabled = false;
+        } else if (data.allReady) {
+            if (lobbyStatusText) lobbyStatusText.textContent = 'Alle Spieler bereit! Warte auf Host...';
+        } else {
+            if (lobbyStatusText) lobbyStatusText.textContent = 'Warte auf andere Spieler...';
+            if (this.isHost && startBtn) {
+                startBtn.disabled = true;
+            }
+        }
+        
+        // Update players list with new ready states
+        this.updateCurrentGamePlayersList(data.players);
+    }
+
+    leaveLobby() {
+        if (this.currentGameId) {
+            // Send leave game event to server
+            this.socket.emit('leave_game', {
+                gameId: this.currentGameId,
+                playerName: this.playerName
+            });
+        }
+        
+        this.hideCurrentGameLobby();
+        
+        // Refresh games list
+        this.loadAvailableGames();
+    }
+
+    // Remove old modal-related functions and replace with new ones
+    joinGameLobby(gameId) {
+        this.currentGameId = gameId;
+    }
+
+    setupLobbyModal() {
+        // This function is no longer needed with the new inline lobby
+    }
+
+    updateLobbyPlayersList() {
+        // This function is replaced by updateCurrentGamePlayersList
+    }
+
+    resetLobbyState() {
+        this.hideCurrentGameLobby();
+        this.loadAvailableGames();
+    }
         
         this.init();
     }
@@ -43,15 +205,15 @@ class LobbyManager {
         this.socket.on('game_created', (data) => {
             showNotification('Spiel erfolgreich erstellt!', 'success');
             this.isHost = data.isHost;
-            this.setupLobbyModal(data.gameName, data.maxPlayers, data.mapSize);
-            this.joinGameLobby(data.gameId);
+            this.currentGameId = data.gameId;
+            this.showCurrentGameLobby(data);
         });
 
         this.socket.on('game_joined', (data) => {
             showNotification('Spiel erfolgreich beigetreten!', 'success');
             this.isHost = data.isHost;
-            this.setupLobbyModal(data.gameName, data.maxPlayers, data.mapSize);
-            this.joinGameLobby(data.gameId);
+            this.currentGameId = data.gameId;
+            this.showCurrentGameLobby(data);
         });
 
         this.socket.on('games_updated', (games) => {
@@ -72,15 +234,14 @@ class LobbyManager {
             } else {
                 showNotification('Du hast das Spiel verlassen', 'info');
             }
-            this.resetLobbyState();
+            this.hideCurrentGameLobby();
         });
 
         this.socket.on('lobby_players_updated', (players) => {
-            this.updateLobbyPlayersList(players);
+            this.updateCurrentGamePlayersList(players);
         });
 
         this.socket.on('player_ready_status', (data) => {
-            showNotification(`${data.playerName} ist ${data.ready ? 'bereit' : 'nicht bereit'}`, 'info');
             this.updateReadyStatus(data);
         });
 

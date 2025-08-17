@@ -463,15 +463,16 @@ io.on('connection', (socket) => {
                 return;
             }
             
-            // Reset player's race selection in database
+            // Reset player's race selection in database (allow deselection of confirmed races)
             const result = await gameController.deselectRace(data.gameId, data.playerName);
             
             if (result.success) {
-                console.log(`✓ Race deselected by ${data.playerName} in game ${data.gameId}`);
+                console.log(`✓ Race deselected by ${data.playerName} in game ${data.gameId} (was confirmed: ${result.wasConfirmed})`);
                 
                 // Notify all players about deselection
                 io.to(`db_game_${data.gameId}`).emit('player_race_deselected', {
-                    playerName: data.playerName
+                    playerName: data.playerName,
+                    wasConfirmed: result.wasConfirmed
                 });
                 
                 socket.emit('race_deselection_confirmed', {

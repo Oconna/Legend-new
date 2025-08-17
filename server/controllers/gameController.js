@@ -136,12 +136,10 @@ class GameController {
                 return { success: false, message: 'Spieler nicht in diesem Spiel gefunden' };
             }
 
-            // Verhindere Deselection wenn bereits bestätigt
-            if (player[0].race_confirmed) {
-                return { success: false, message: 'Bestätigte Rassen können nicht mehr geändert werden' };
-            }
+            // Erlaube Deselection auch von bestätigten Rassen (für "Rasse ändern" Funktion)
+            console.log(`Allowing deselection for player ${playerName} (was confirmed: ${player[0].race_confirmed})`);
 
-            // Entferne die Rassenwahl
+            // Entferne die Rassenwahl komplett
             await db.query(
                 'UPDATE game_players SET race_id = NULL, race_confirmed = false WHERE game_id = ? AND player_name = ?',
                 [gameId, playerName]
@@ -151,7 +149,8 @@ class GameController {
 
             return {
                 success: true,
-                playerName: playerName
+                playerName: playerName,
+                wasConfirmed: player[0].race_confirmed
             };
 
         } catch (error) {

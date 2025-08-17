@@ -208,6 +208,8 @@ class LobbyManager {
         });
 
         this.socket.on('player_race_deselected', (data) => {
+            console.log('Player race deselected:', data);
+            
             // Update local tracking - player deselected race
             const playerStatus = this.playersRaceStatus.get(data.playerName);
             if (playerStatus) {
@@ -217,7 +219,8 @@ class LobbyManager {
             }
             
             if (data.playerName !== this.playerName) {
-                showNotification(`${data.playerName} hat die Auswahl zurückgesetzt`, 'info');
+                const action = data.wasConfirmed ? 'bestätigte Rasse zurückgesetzt' : 'Auswahl zurückgesetzt';
+                showNotification(`${data.playerName} hat ${action}`, 'info');
             }
             
             this.updatePlayersRaceStatus();
@@ -225,7 +228,8 @@ class LobbyManager {
         });
 
         this.socket.on('race_deselection_confirmed', (data) => {
-            showNotification(data.message, 'info');
+            console.log('Race deselection confirmed:', data.message);
+            // Don't show notification here as it's already shown in changeRaceSelection()
         });
 
         this.socket.on('game_started', (data) => {
@@ -899,22 +903,24 @@ class LobbyManager {
             return;
         }
         
-        // Allow changing race (this would reset confirmation status)
+        console.log('Changing race selection - resetting confirmation status');
+        
+        // Reset local state first (before any server calls)
         this.raceConfirmed = false;
-        
-        // Notify server about deselection first
-        this.notifyRaceDeselection();
-        
+        const oldRaceId = this.selectedRaceId;
         this.selectedRaceId = null;
         
-        // Reset UI
-        document.querySelectorAll('.race-card').forEach(card => {
-            card.classList.remove('selected', 'confirmed');
-            const indicator = card.querySelector('.confirmed-indicator');
-            if (indicator) {
-                indicator.remove();
-            }
-        });
+        // Update own player status locally
+        const ownStatus = this.playersRaceStatus.get(this.playerName);
+        if (ownStatus) {
+            ownStatus.selectedRaceId = null;
+            ownStatus.confirmed = false;
+            ownStatus.raceName = null;
+        }
+        
+        // Reset UI immediately
+        this.resetAllRaceCards();
+        this.applyCurrentRaceStates();
         
         const selectedRaceInfo = document.getElementById('selectedRaceInfo');
         if (selectedRaceInfo) {
@@ -923,6 +929,10 @@ class LobbyManager {
         
         this.updateRaceSelectionButtons();
         this.updateRaceSelectionStatus();
+        this.updatePlayersRaceStatus();
+        
+        // Now notify server about deselection
+        this.notifyRaceDeselection();
         
         showNotification('Du kannst jetzt eine neue Rasse wählen', 'info');
     }
@@ -945,12 +955,12 @@ class LobbyManager {
             return;
         }
 
-        console.log('Sending race deselection:', {
+        console.log('Sending race deselection (allowing confirmed races):', {
             gameId: gameDbId,
             playerName: this.playerName
         });
 
-        // Send deselection to server
+        // Send deselection to server (should work even for confirmed races)
         this.socket.emit('deselect_race', {
             gameId: gameDbId,
             playerName: this.playerName

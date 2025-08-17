@@ -4,11 +4,14 @@ class LobbyManager {
     constructor() {
         this.socket = null;
         this.currentGameId = null;
+        this.gameState = null;
         this.playerName = '';
         this.availableRaces = [];
         this.currentPlayers = [];
         this.isReady = false;
         this.isHost = false;
+        this.selectedRaceId = null;
+        this.gameDbId = null; // Database ID after game starts
         
         this.init();
     }
@@ -32,6 +35,7 @@ class LobbyManager {
         this.socket.on('disconnect', () => {
             console.log('Verbindung zum Server verloren');
             showNotification('Verbindung zum Server verloren', 'error');
+            this.hideCurrentGameLobby();
         });
 
         this.socket.on('error', (error) => {
@@ -89,6 +93,7 @@ class LobbyManager {
         });
 
         this.socket.on('start_race_selection', (data) => {
+            this.gameDbId = data.dbGameId;
             this.hideCurrentGameLobby();
             this.startRaceSelection();
         });
@@ -96,13 +101,33 @@ class LobbyManager {
         this.socket.on('race_selected', (data) => {
             showNotification(`${data.playerName} hat ${data.raceName} gewählt`, 'info');
             this.updateRaceSelection(data.raceId, data.playerName);
+            
+            // Update status display
+            this.updateRaceSelectionStatus();
+        });
+
+        this.socket.on('all_races_selected', (data) => {
+            const statusEl = document.getElementById('raceSelectionStatus');
+            if (statusEl) {
+                statusEl.textContent = 'Alle Rassen gewählt! Karte wird generiert...';
+            }
+            showNotification('Alle Rassen gewählt! Spiel wird vorbereitet...', 'success');
         });
 
         this.socket.on('game_started', (data) => {
             showNotification('Spiel startet! Weiterleitung...', 'success');
+            hideModal('raceSelectionModal');
             setTimeout(() => {
                 window.location.href = `/game/${data.dbGameId}`;
             }, 2000);
+        });
+
+        // Join database game room after race selection starts
+        this.socket.on('join_db_game_room', (data) => {
+            this.socket.emit('join_db_game_room', {
+                gameId: data.dbGameId,
+                playerName: this.playerName
+            });
         });
     }
 
@@ -351,6 +376,8 @@ class LobbyManager {
         this.currentGameId = null;
         this.isReady = false;
         this.isHost = false;
+        this.selectedRaceId = null;
+        this.gameDbId = null;
         
         // Reset ready button
         const readyBtn = document.getElementById('readyBtn');
@@ -502,7 +529,7 @@ class LobbyManager {
 
     setupRaceSelectionModal() {
         const racesList = document.getElementById('racesList');
-        if (!racesList) return;
+        if (!racesList || !this.availableRaces.length) return;
         
         racesList.innerHTML = this.availableRaces.map(race => `
             <div class="race-card" data-race-id="${race.id}">
@@ -519,23 +546,37 @@ class LobbyManager {
                 this.selectRace(raceId);
             });
         });
+
+        // Initialize status
+        this.updateRaceSelectionStatus();
     }
 
     selectRace(raceId) {
-        if (!this.currentGameId) return;
+        if (!this.gameDbId) {
+            showNotification('Spiel-ID fehlt. Bitte versuche es erneut.', 'error');
+            return;
+        }
+
+        // Check if race already selected or unavailable
+        const raceCard = document.querySelector(`[data-race-id="${raceId}"]`);
+        if (raceCard && raceCard.classList.contains('unavailable')) {
+            showNotification('Diese Rasse wurde bereits gewählt', 'warning');
+            return;
+        }
 
         // Update UI to show selection
         document.querySelectorAll('.race-card').forEach(card => {
             card.classList.remove('selected');
         });
-        const selectedCard = document.querySelector(`[data-race-id="${raceId}"]`);
-        if (selectedCard) {
-            selectedCard.classList.add('selected');
+        if (raceCard) {
+            raceCard.classList.add('selected');
         }
+
+        this.selectedRaceId = raceId;
 
         // Send selection to server
         this.socket.emit('select_race', {
-            gameId: this.currentGameId,
+            gameId: this.gameDbId,
             playerName: this.playerName,
             raceId: raceId
         });
@@ -554,6 +595,8 @@ class LobbyManager {
                 `;
             }
         }
+
+        this.updateRaceSelectionStatus();
     }
 
     updateRaceSelection(raceId, playerName) {
@@ -580,6 +623,17 @@ class LobbyManager {
             `;
             raceCard.style.position = 'relative';
             raceCard.appendChild(takenIndicator);
+        }
+    }
+
+    updateRaceSelectionStatus() {
+        const statusEl = document.getElementById('raceSelectionStatus');
+        if (!statusEl) return;
+
+        if (this.selectedRaceId) {
+            statusEl.textContent = 'Rasse gewählt! Warte auf andere Spieler...';
+        } else {
+            statusEl.textContent = 'Wähle deine Rasse aus...';
         }
     }
 }

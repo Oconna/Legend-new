@@ -105,24 +105,25 @@
             </section>
         </main>
 
-        <!-- Game Lobby Modal - REMOVE THIS -->
-        <!-- Race Selection Modal - KEEP THIS -->
-        <div id="raceSelectionModal" class="modal">
+        <!-- Race Selection Modal -->
         <div id="raceSelectionModal" class="modal">
             <div class="modal-content">
                 <div class="modal-header">
                     <h3>Rassenwahl</h3>
+                    <p>Wähle deine Rasse für das Spiel. Jede Rasse hat einzigartige Einheiten!</p>
                 </div>
                 <div class="modal-body">
                     <div class="race-selection">
-                        <p>Wähle deine Rasse für das Spiel:</p>
                         <div id="racesList" class="races-grid">
                             <!-- Races will be loaded here -->
                         </div>
                         <div class="race-info">
                             <div id="selectedRaceInfo" class="selected-race-info">
-                                <p>Wähle eine Rasse aus der Liste above.</p>
+                                <p>Wähle eine Rasse aus der Liste oben.</p>
                             </div>
+                        </div>
+                        <div class="race-selection-status">
+                            <p id="raceSelectionStatus">Warte auf andere Spieler...</p>
                         </div>
                     </div>
                 </div>

@@ -213,11 +213,34 @@ io.on('connection', (socket) => {
                     // Start race selection phase
                     await gameController.startRaceSelection(result.dbGameId);
                     
+                    // Move all players to database game room
+                    const memoryGame = improvedLobbyManager.games.get(playerData.gameId);
+                    if (memoryGame) {
+                        for (const [socketId, player] of memoryGame.players) {
+                            const playerSocket = io.sockets.sockets.get(socketId);
+                            if (playerSocket) {
+                                playerSocket.join(`db_game_${result.dbGameId}`);
+                                playerSocket.leave(`game_${playerData.gameId}`);
+                            }
+                        }
+                    }
+                    
                     // Notify all players in the game
-                    io.to(`game_${playerData.gameId}`).emit('start_race_selection', {
+                    io.to(`db_game_${result.dbGameId}`).emit('start_race_selection', {
                         message: 'Spiel gestartet! Rassenwahl beginnt...',
                         dbGameId: result.dbGameId
                     });
+                    
+                    // Clean up memory game since it's now in database
+                    improvedLobbyManager.games.delete(playerData.gameId);
+                    
+                    // Update players to remove gameId since they're now in DB game
+                    for (const player of result.players) {
+                        const playerSocket = improvedLobbyManager.players.get(player.socketId);
+                        if (playerSocket) {
+                            playerSocket.dbGameId = result.dbGameId;
+                        }
+                    }
                     
                     // Update games list (game no longer in waiting state)
                     io.emit('games_updated', improvedLobbyManager.getAvailableGames());
@@ -264,13 +287,16 @@ io.on('connection', (socket) => {
         }
     });
 
-    // Race Selection Events (for started games)
+    // Race Selection Events (for started games in database)
     socket.on('select_race', async (data) => {
         try {
+            console.log('Race selection:', data);
+            
             // For race selection phase, we work with database
             const result = await gameController.selectRace(data.gameId, data.playerName, data.raceId);
             
             if (result.success) {
+                // Notify all players in the database game room
                 io.to(`db_game_${data.gameId}`).emit('race_selected', {
                     playerName: data.playerName,
                     raceId: data.raceId,
@@ -278,13 +304,21 @@ io.on('connection', (socket) => {
                 });
 
                 if (result.allRacesSelected) {
+                    // All races selected, notify players
+                    io.to(`db_game_${data.gameId}`).emit('all_races_selected', {
+                        message: 'Alle Rassen gewählt! Karte wird generiert...'
+                    });
+                    
                     // Start map generation and game
                     const gameStartResult = await gameController.startGame(data.gameId);
                     if (gameStartResult.success) {
                         io.to(`db_game_${data.gameId}`).emit('game_started', {
                             message: 'Spiel startet! Karte wird generiert...',
+                            dbGameId: data.gameId,
                             gameData: gameStartResult.gameData
                         });
+                    } else {
+                        io.to(`db_game_${data.gameId}`).emit('error', gameStartResult.message);
                     }
                 }
             } else {
@@ -292,17 +326,80 @@ io.on('connection', (socket) => {
             }
         } catch (error) {
             console.error('Error in select_race:', error);
-            socket.emit('error', 'Fehler bei der Rassenwahl');
+            socket.emit('error', 'Fehler bei der Rassenwahl: ' + error.message);
+        }
+    });
+
+    // Game State Events (for active games)
+    socket.on('join_db_game_room', (data) => {
+        try {
+            console.log(`Player ${data.playerName} joining DB game room ${data.gameId}`);
+            socket.join(`db_game_${data.gameId}`);
+        } catch (error) {
+            console.error('Error joining DB game room:', error);
         }
     });
 
     socket.on('get_game_state', async (data) => {
         try {
             const gameState = await gameController.getGameState(data.gameId);
-            socket.emit('game_state', gameState);
+            if (gameState) {
+                socket.emit('game_state', gameState);
+            } else {
+                socket.emit('error', 'Spielstatus nicht gefunden');
+            }
         } catch (error) {
             console.error('Error in get_game_state:', error);
-            socket.emit('error', 'Fehler beim Laden des Spielstatus');
+            socket.emit('error', 'Fehler beim Laden des Spielstatus: ' + error.message);
+        }
+    });
+
+    // Game Actions (for active games)
+    socket.on('player_move', async (data) => {
+        try {
+            // TODO: Implement player move logic
+            console.log('Player move:', data);
+            
+            // Validate move, update database, broadcast to all players in game
+            const result = await gameController.executePlayerMove(
+                data.gameId, 
+                data.playerId, 
+                data.fromX, 
+                data.fromY, 
+                data.toX, 
+                data.toY
+            );
+            
+            if (result.success) {
+                io.to(`db_game_${data.gameId}`).emit('unit_moved', {
+                    playerId: data.playerId,
+                    fromX: data.fromX,
+                    fromY: data.fromY,
+                    toX: data.toX,
+                    toY: data.toY
+                });
+            } else {
+                socket.emit('error', result.message);
+            }
+        } catch (error) {
+            console.error('Error in player_move:', error);
+            socket.emit('error', 'Fehler bei der Bewegung');
+        }
+    });
+
+    socket.on('end_turn', async (data) => {
+        try {
+            // TODO: Implement end turn logic
+            console.log('End turn:', data);
+            
+            // Update database, calculate next player, broadcast turn change
+            io.to(`db_game_${data.gameId}`).emit('turn_ended', {
+                currentPlayer: data.nextPlayer,
+                turnNumber: data.turnNumber
+            });
+        } catch (error) {
+            console.error('Error in end_turn:', error);
+            socket.emit('error', 'Fehler beim Beenden des Zuges');
         }
     });
 
@@ -355,4 +452,5 @@ server.listen(PORT, () => {
     console.log(`🚀 Server läuft auf Port ${PORT}`);
     console.log(`📱 Spiel verfügbar unter: http://localhost:${PORT}`);
     console.log(`💾 Memory-basierte Lobby aktiviert`);
+    console.log(`🎯 Datenbank für persistente Spiele bereit`);
 });

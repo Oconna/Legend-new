@@ -161,6 +161,101 @@ class LobbyManager {
             });
         }
     }
+	
+handleIncomingChatMessage(data) {
+        if (!data || !data.playerName || !data.message) {
+            console.warn('Invalid chat message data:', data);
+            return;
+        }
+        
+        // Füge Nachricht zu beiden Chat-Containern hinzu
+        this.addChatMessageToContainer('lobbyChatMessages', data);
+        this.addChatMessageToContainer('chatMessages', data);
+    }
+
+    // NEUE Methode: Chat-Nachricht zu Container hinzufügen
+    addChatMessageToContainer(containerId, data) {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+        
+        const messageElement = this.createChatMessageElement(data);
+        container.appendChild(messageElement);
+        
+        // Auto-scroll
+        container.scrollTop = container.scrollHeight;
+    }
+
+    // NEUE Methode: Chat-Nachricht Element erstellen
+    createChatMessageElement(data) {
+        const messageElement = document.createElement('div');
+        const isOwnMessage = data.playerName === this.playerName;
+        
+        messageElement.className = `chat-message ${isOwnMessage ? 'own-message' : 'other-message'}`;
+        messageElement.innerHTML = `
+            <div class="message-header">
+                <span class="player-name">${this.escapeHtml(data.playerName)}</span>
+                <span class="message-time">${this.formatTime(data.timestamp)}</span>
+            </div>
+            <div class="message-content">
+                ${this.formatChatMessage(data.message)}
+            </div>
+        `;
+        
+        return messageElement;
+    }
+
+    // NEUE Methode: System-Nachricht hinzufügen
+    addSystemChatMessage(message) {
+        ['lobbyChatMessages', 'chatMessages'].forEach(containerId => {
+            const container = document.getElementById(containerId);
+            if (container) {
+                const messageElement = document.createElement('div');
+                messageElement.className = 'chat-message system-message';
+                messageElement.innerHTML = `
+                    <div class="message-content">
+                        <span class="system-text">${this.escapeHtml(message)}</span>
+                        <span class="message-time">${this.formatTime(Date.now())}</span>
+                    </div>
+                `;
+                container.appendChild(messageElement);
+                container.scrollTop = container.scrollHeight;
+            }
+        });
+    }
+
+    // NEUE Methode: Player Count aktualisieren
+    updateChatPlayerCount(count) {
+        ['lobbyChatPlayerCount', 'chatPlayerCount'].forEach(elementId => {
+            const element = document.getElementById(elementId);
+            if (element) {
+                element.textContent = count;
+            }
+        });
+    }
+
+    // NEUE Hilfsmethoden
+    formatTime(timestamp) {
+        return new Date(timestamp).toLocaleTimeString('de-DE', {
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    }
+
+    formatChatMessage(message) {
+        return this.escapeHtml(message)
+            .replace(/\n/g, '<br>')
+            .replace(/:\)/g, '😊')
+            .replace(/:\(/g, '😞')
+            .replace(/:D/g, '😃')
+            .replace(/;\)/g, '😉')
+            .replace(/:P/g, '😛');
+    }
+
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
 
     setupSocket() {
         // Enhanced Socket.IO configuration with better reconnection
@@ -318,6 +413,32 @@ class LobbyManager {
             }
         });
 
+        // *** CHAT EVENTS - WICHTIG FÜR CHAT FUNKTIONALITÄT ***
+        this.socket.on('chat_message', (data) => {
+            console.log('Received chat message:', data);
+            this.handleIncomingChatMessage(data);
+        });
+
+        this.socket.on('chat_player_joined', (data) => {
+            this.addSystemChatMessage(`${data.playerName} ist dem Chat beigetreten`);
+            this.updateChatPlayerCount(data.playerCount);
+        });
+
+        this.socket.on('chat_player_left', (data) => {
+            this.addSystemChatMessage(`${data.playerName} hat den Chat verlassen`);
+            this.updateChatPlayerCount(data.playerCount);
+        });
+
+        this.socket.on('chat_player_count', (data) => {
+            this.updateChatPlayerCount(data.count);
+        });
+
+        this.socket.on('chat_history', (data) => {
+            console.log('Received chat history:', data);
+            this.loadChatHistory(data.messages);
+        });
+
+        // Race selection events
         this.socket.on('race_selection_confirmed', (data) => {
             showNotification(`Rasse bestätigt: ${data.raceName}`, 'success');
             
@@ -482,6 +603,32 @@ class LobbyManager {
             // Server is alive, connection is good
             console.log('Heartbeat OK');
         });
+    }
+
+    // NEUE Methode: Chat-Verlauf laden
+    loadChatHistory(messages) {
+        if (!messages || !Array.isArray(messages)) return;
+        
+        console.log(`Loading chat history: ${messages.length} messages`);
+        
+        // Lade Nachrichten in beide Chat-Container
+        ['lobbyChatMessages', 'chatMessages'].forEach(containerId => {
+            const container = document.getElementById(containerId);
+            if (container) {
+                container.innerHTML = ''; // Clear existing
+                
+                messages.forEach(msg => {
+                    this.addChatMessageToContainer(containerId, {
+                        playerName: msg.playerName,
+                        message: msg.message,
+                        timestamp: msg.timestamp,
+                        playerId: msg.playerId
+                    });
+                });
+            }
+        });
+        
+        this.addSystemChatMessage('Chat-Verlauf geladen');
     }
 
     // NEW: Start heartbeat to keep connection alive
@@ -971,6 +1118,7 @@ class LobbyManager {
         this.loadAvailableGames();
     }
 
+    // UPDATED: startRaceSelection Methode - Chat weiterführen statt neu initialisieren
     startRaceSelection() {
         console.log('Starting race selection modal');
         console.log('Available races:', this.availableRaces.length);
@@ -983,41 +1131,274 @@ class LobbyManager {
         // Make the race selection modal persistent (cannot be closed by clicking outside or ESC)
         makeModalPersistent('raceSelectionModal');
         
-        // Initialize chat system
-        if (this.chatManager && this.gameDbId && this.playerName) {
-            const chatInitialized = this.chatManager.init(this.socket, this.gameDbId, this.playerName);
-            if (chatInitialized) {
-                console.log('Chat system initialized successfully');
-                
-                // Setup character counter for chat input
-                this.setupChatCharacterCounter();
-                
-                // Join chat room on server
-                this.socket.emit('join_chat_room', {
-                    gameId: this.gameDbId,
-                    playerName: this.playerName
-                });
-            } else {
-                console.warn('Failed to initialize chat system');
-            }
+        // *** CHAT FIX: Chat für Race Selection übertragen ***
+        this.transferChatToRaceSelection();
+    }
+
+    // NEUE Methode: Chat von Lobby zu Race Selection übertragen
+    transferChatToRaceSelection() {
+        console.log('Transferring chat to race selection...');
+        
+        if (!this.chatManager || !this.chatManager.isInitialized) {
+            console.warn('Chat not initialized in lobby, initializing for race selection...');
+            this.initializeRaceSelectionChat();
+            return;
         }
         
-        // Add debug info to modal if needed
-        const modal = document.getElementById('raceSelectionModal');
-        if (modal && !this.gameDbId) {
-            const debugInfo = document.createElement('div');
-            debugInfo.style.cssText = 'background: #f39c12; color: white; padding: 0.5rem; margin-bottom: 1rem; border-radius: 4px;';
-            debugInfo.innerHTML = `
-                <strong>⚠️ Debug Info:</strong><br>
-                Spiel-ID: ${this.gameDbId || 'FEHLT'}<br>
-                Memory Game ID: ${this.currentGameId || 'FEHLT'}<br>
-                Spieler: ${this.playerName || 'FEHLT'}
-            `;
-            const modalBody = modal.querySelector('.modal-body');
-            if (modalBody && modalBody.firstChild) {
-                modalBody.insertBefore(debugInfo, modalBody.firstChild);
+        // Deaktiviere Lobby-Chat visuell (aber behalte Verbindung)
+        const lobbyChatElement = document.getElementById('lobbyChat');
+        if (lobbyChatElement) {
+            lobbyChatElement.style.display = 'none';
+        }
+        
+        // Aktiviere Race Selection Chat mit demselben ChatManager
+        const raceSelectionChatElement = document.getElementById('raceSelectionChat');
+        if (raceSelectionChatElement) {
+            raceSelectionChatElement.style.display = 'block';
+            
+            // Setup Race Selection Chat Elements für bestehenden ChatManager
+            this.setupRaceSelectionChatElements();
+            
+            // Transfer Chat-Nachrichten
+            this.transferChatMessages();
+            
+            console.log('Chat successfully transferred to race selection');
+        } else {
+            console.error('Race selection chat element not found');
+        }
+    }
+
+    // NEUE Methode: Race Selection Chat initialisieren (falls kein Lobby-Chat existiert)
+    initializeRaceSelectionChat() {
+        console.log('Initializing race selection chat...');
+        
+        if (!this.chatManager) {
+            this.chatManager = new window.ChatManager();
+        }
+        
+        // Verwende DB Game ID für Race Selection Chat
+        const gameId = this.gameDbId || this.currentGameId;
+        if (!gameId || !this.playerName) {
+            console.error('Missing gameDbId or playerName for race selection chat');
+            return;
+        }
+        
+        // Chat mit Race Selection Kontext initialisieren
+        const chatInitialized = this.chatManager.init(this.socket, gameId, this.playerName);
+        
+        if (chatInitialized) {
+            // Setup für Race Selection
+            this.setupRaceSelectionChatElements();
+            
+            // Join chat room
+            this.socket.emit('join_chat_room', {
+                gameId: gameId,
+                playerName: this.playerName
+            });
+            
+            console.log('Race selection chat initialized successfully');
+        }
+    }
+
+    // NEUE Methode: Race Selection Chat Elements setup
+    setupRaceSelectionChatElements() {
+        const raceSelectionChat = document.getElementById('raceSelectionChat');
+        if (!raceSelectionChat) {
+            console.error('Race selection chat container not found');
+            return;
+        }
+        
+        // Zeige Chat-Container
+        raceSelectionChat.style.display = 'block';
+        
+        // Update ChatManager mit Race Selection Elements
+        this.chatManager.chatContainer = raceSelectionChat;
+        this.chatManager.messagesContainer = document.getElementById('chatMessages');
+        this.chatManager.messageInput = document.getElementById('chatMessageInput');
+        this.chatManager.sendButton = document.getElementById('chatSendButton');
+        this.chatManager.playerCountElement = document.getElementById('chatPlayerCount');
+        
+        // Setup Event Listeners für Race Selection Chat
+        this.setupRaceSelectionChatEventListeners();
+        
+        // Setup Character Counter für Race Selection
+        this.setupRaceSelectionChatCharacterCounter();
+        
+        console.log('Race selection chat elements setup complete');
+    }
+
+    // NEUE Methode: Event Listeners für Race Selection Chat
+    setupRaceSelectionChatEventListeners() {
+        const messageInput = document.getElementById('chatMessageInput');
+        const sendButton = document.getElementById('chatSendButton');
+        
+        if (!messageInput || !sendButton) {
+            console.error('Race selection chat input elements not found');
+            return;
+        }
+        
+        // Remove existing listeners
+        messageInput.removeEventListener('keypress', this.raceSelectionKeypressHandler);
+        sendButton.removeEventListener('click', this.raceSelectionClickHandler);
+        messageInput.removeEventListener('input', this.raceSelectionInputHandler);
+        
+        // Create bound handlers
+        this.raceSelectionKeypressHandler = (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                this.sendChatMessage();
+            }
+        };
+        
+        this.raceSelectionClickHandler = () => {
+            this.sendChatMessage();
+        };
+        
+        this.raceSelectionInputHandler = () => {
+            this.updateCharacterCounter();
+            this.adjustTextareaHeight(messageInput);
+        };
+        
+        // Add event listeners
+        messageInput.addEventListener('keypress', this.raceSelectionKeypressHandler);
+        sendButton.addEventListener('click', this.raceSelectionClickHandler);
+        messageInput.addEventListener('input', this.raceSelectionInputHandler);
+        
+        console.log('Race selection chat event listeners setup complete');
+    }
+
+    // NEUE Methode: Character Counter für Race Selection
+    setupRaceSelectionChatCharacterCounter() {
+        const messageInput = document.getElementById('chatMessageInput');
+        const charCount = document.getElementById('chatCharCount');
+        
+        if (messageInput && charCount) {
+            // Initial update
+            this.updateCharacterCounter();
+            console.log('Race selection character counter setup complete');
+        }
+    }
+
+    // NEUE Methode: Chat-Nachrichten von Lobby zu Race Selection übertragen
+    transferChatMessages() {
+        const lobbyChatMessages = document.getElementById('lobbyChatMessages');
+        const raceSelectionChatMessages = document.getElementById('chatMessages');
+        
+        if (lobbyChatMessages && raceSelectionChatMessages) {
+            // Kopiere alle Nachrichten
+            raceSelectionChatMessages.innerHTML = lobbyChatMessages.innerHTML;
+            
+            // Scroll to bottom
+            raceSelectionChatMessages.scrollTop = raceSelectionChatMessages.scrollHeight;
+            
+            console.log('Chat messages transferred to race selection');
+        }
+    }
+
+    // NEUE Methode: Chat-Nachricht senden (funktioniert für beide Kontexte)
+    sendChatMessage() {
+        console.log('Sending chat message...');
+        
+        // Bestimme aktuellen Chat-Input
+        let messageInput;
+        let gameId;
+        
+        // Prüfe welcher Chat aktiv ist
+        const raceModal = document.getElementById('raceSelectionModal');
+        const isRaceModalOpen = raceModal && raceModal.style.display === 'block';
+        
+        if (isRaceModalOpen) {
+            // Race Selection Chat
+            messageInput = document.getElementById('chatMessageInput');
+            gameId = this.gameDbId || this.currentGameId;
+        } else {
+            // Lobby Chat
+            messageInput = document.getElementById('lobbyChatMessageInput');
+            gameId = this.currentGameId;
+        }
+        
+        if (!messageInput) {
+            console.error('Chat input not found');
+            return;
+        }
+        
+        const message = messageInput.value.trim();
+        if (!message) {
+            console.warn('Empty message, not sending');
+            return;
+        }
+        
+        if (message.length > 500) {
+            showNotification('Nachricht ist zu lang (max. 500 Zeichen)', 'error');
+            return;
+        }
+        
+        if (!gameId || !this.playerName) {
+            console.error('Missing gameId or playerName for chat message');
+            showNotification('Fehler: Spiel-ID oder Spielername fehlt', 'error');
+            return;
+        }
+        
+        console.log('Sending message:', { gameId, playerName: this.playerName, message });
+        
+        // Send message to server
+        this.socket.emit('send_chat_message', {
+            gameId: gameId,
+            playerName: this.playerName,
+            message: message,
+            timestamp: Date.now()
+        });
+        
+        // Clear input
+        messageInput.value = '';
+        this.updateCharacterCounter();
+        this.adjustTextareaHeight(messageInput);
+        messageInput.focus();
+        
+        console.log('Chat message sent successfully');
+    }
+
+    // NEUE Methode: Character Counter aktualisieren
+    updateCharacterCounter() {
+        // Bestimme aktuellen Kontext
+        const raceModal = document.getElementById('raceSelectionModal');
+        const isRaceModalOpen = raceModal && raceModal.style.display === 'block';
+        
+        let messageInput, charCount;
+        
+        if (isRaceModalOpen) {
+            messageInput = document.getElementById('chatMessageInput');
+            charCount = document.getElementById('chatCharCount');
+        } else {
+            messageInput = document.getElementById('lobbyChatMessageInput');
+            charCount = document.getElementById('lobbyChatCharCount');
+        }
+        
+        if (messageInput && charCount) {
+            const currentLength = messageInput.value.length;
+            const maxLength = 500;
+            
+            charCount.textContent = currentLength;
+            
+            // Update styling
+            charCount.className = 'char-count';
+            if (currentLength > maxLength * 0.8) {
+                charCount.classList.add('warning');
+            }
+            if (currentLength > maxLength * 0.95) {
+                charCount.classList.remove('warning');
+                charCount.classList.add('danger');
             }
         }
+    }
+
+    // NEUE Methode: Textarea-Höhe anpassen
+    adjustTextareaHeight(textarea) {
+        if (!textarea) return;
+        
+        textarea.style.height = 'auto';
+        const newHeight = Math.min(textarea.scrollHeight, 100); // Max 100px
+        textarea.style.height = newHeight + 'px';
     }
 
     setupRaceSelectionModal() {

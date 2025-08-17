@@ -930,9 +930,9 @@ class LobbyManager {
             ownStatus.raceName = null;
         }
         
-        // Reset UI immediately
+        // Complete reset and rebuild of race cards display
         this.resetAllRaceCards();
-        this.applyCurrentRaceStates();
+        this.updateRaceCardsDisplay();
         
         const selectedRaceInfo = document.getElementById('selectedRaceInfo');
         if (selectedRaceInfo) {

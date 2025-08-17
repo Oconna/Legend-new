@@ -372,36 +372,50 @@ io.on('connection', (socket) => {
                 return;
             }
             
+            const confirmed = data.confirmed || false;
+            
             // For race selection phase, we work with database
-            const result = await gameController.selectRace(data.gameId, data.playerName, data.raceId);
+            const result = await gameController.selectRace(data.gameId, data.playerName, data.raceId, confirmed);
             
             if (result.success) {
-                console.log(`✓ Race ${result.raceName} selected by ${result.playerName} in game ${data.gameId}`);
+                console.log(`✓ Race ${result.raceName} ${confirmed ? 'confirmed' : 'selected'} by ${result.playerName} in game ${data.gameId}`);
                 
-                // Notify all players in the database game room
-                io.to(`db_game_${data.gameId}`).emit('race_selected', {
-                    playerName: result.playerName,
-                    raceId: result.raceId,
-                    raceName: result.raceName,
-                    totalPlayers: result.totalPlayers,
-                    racesSelected: result.racesSelected
-                });
-
-                // Send confirmation to selecting player
-                socket.emit('race_selection_confirmed', {
-                    raceId: result.raceId,
-                    raceName: result.raceName,
-                    message: `Du hast ${result.raceName} gewählt!`
-                });
-
-                if (result.allRacesSelected) {
-                    console.log(`🎯 All races selected for game ${data.gameId}, starting map generation...`);
+                if (confirmed) {
+                    // Race was confirmed
+                    socket.emit('race_selection_confirmed', {
+                        raceId: result.raceId,
+                        raceName: result.raceName,
+                        message: `Du hast ${result.raceName} bestätigt!`
+                    });
                     
-                    // All races selected, notify players
-                    io.to(`db_game_${data.gameId}`).emit('all_races_selected', {
-                        message: 'Alle Rassen gewählt! Karte wird generiert...',
+                    // Notify all players about confirmation
+                    io.to(`db_game_${data.gameId}`).emit('player_race_confirmed', {
+                        playerName: result.playerName,
+                        raceId: result.raceId,
+                        raceName: result.raceName,
+                        confirmedCount: result.racesConfirmed,
+                        totalPlayers: result.totalPlayers
+                    });
+                } else {
+                    // Race was only selected (not confirmed)
+                    // Notify all players about selection
+                    io.to(`db_game_${data.gameId}`).emit('player_race_selected', {
+                        playerName: result.playerName,
+                        raceId: result.raceId,
+                        raceName: result.raceName,
+                        selectedCount: result.racesSelected,
+                        totalPlayers: result.totalPlayers
+                    });
+                }
+
+                if (result.allRacesConfirmed) {
+                    console.log(`🎯 All races confirmed for game ${data.gameId}, starting map generation...`);
+                    
+                    // All races confirmed, notify players
+                    io.to(`db_game_${data.gameId}`).emit('all_races_confirmed', {
+                        message: 'Alle Rassen bestätigt! Karte wird generiert...',
                         totalPlayers: result.totalPlayers,
-                        racesSelected: result.racesSelected
+                        racesConfirmed: result.racesConfirmed
                     });
                     
                     // Small delay to let players see the message
@@ -422,12 +436,12 @@ io.on('connection', (socket) => {
                                 io.to(`db_game_${data.gameId}`).emit('error', gameStartResult.message);
                             }
                         } catch (startError) {
-                            console.error('Error starting game after race selection:', startError);
+                            console.error('Error starting game after race confirmation:', startError);
                             io.to(`db_game_${data.gameId}`).emit('error', 'Fehler beim Starten des Spiels: ' + startError.message);
                         }
                     }, 2000); // 2 second delay
                 } else {
-                    console.log(`Waiting for more race selections in game ${data.gameId}: ${result.racesSelected}/${result.totalPlayers}`);
+                    console.log(`Waiting for more race confirmations in game ${data.gameId}: ${result.racesConfirmed}/${result.totalPlayers}`);
                 }
             } else {
                 console.log(`Race selection failed for ${data.playerName} in game ${data.gameId}:`, result.message);

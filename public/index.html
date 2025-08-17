@@ -122,8 +122,22 @@
                                 <p>Wähle eine Rasse aus der Liste oben.</p>
                             </div>
                         </div>
+                        <div class="race-selection-actions">
+                            <button id="confirmRaceBtn" class="btn btn-success" disabled>
+                                Rasse bestätigen
+                            </button>
+                            <button id="changeRaceBtn" class="btn btn-secondary" style="display: none;">
+                                Rasse ändern
+                            </button>
+                        </div>
                         <div class="race-selection-status">
-                            <p id="raceSelectionStatus">Warte auf andere Spieler...</p>
+                            <p id="raceSelectionStatus">Wähle deine Rasse aus...</p>
+                        </div>
+                        <div class="race-players-status">
+                            <h4>Spieler Status:</h4>
+                            <div id="racePlayersStatus" class="players-race-status">
+                                <!-- Player race status will be shown here -->
+                            </div>
                         </div>
                     </div>
                 </div>

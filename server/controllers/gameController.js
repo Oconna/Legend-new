@@ -20,9 +20,9 @@ class GameController {
         }
     }
 
-    async selectRace(gameId, playerName, raceId) {
+    async selectRace(gameId, playerName, raceId, confirmed = false) {
         try {
-            console.log(`Player ${playerName} selecting race ${raceId} in game ${gameId}`);
+            console.log(`Player ${playerName} ${confirmed ? 'confirming' : 'selecting'} race ${raceId} in game ${gameId}`);
 
             // Prüfe ob das Spiel existiert und in der richtigen Phase ist
             const game = await db.query(
@@ -42,7 +42,7 @@ class GameController {
 
             // Prüfe ob der Spieler existiert
             const player = await db.query(
-                'SELECT id, player_name FROM game_players WHERE game_id = ? AND player_name = ?',
+                'SELECT id, player_name, race_id FROM game_players WHERE game_id = ? AND player_name = ?',
                 [gameId, playerName]
             );
 
@@ -50,44 +50,60 @@ class GameController {
                 return { success: false, message: 'Spieler nicht in diesem Spiel gefunden' };
             }
 
-            // Prüfe ob die Rasse bereits von einem anderen Spieler gewählt wurde
-            const existingRaceSelection = await db.query(
-                'SELECT id, player_name FROM game_players WHERE game_id = ? AND race_id = ? AND player_name != ?',
-                [gameId, raceId, playerName]
-            );
+            // Wenn nur Auswahl (nicht Bestätigung), prüfe nicht ob Rasse bereits gewählt wurde
+            if (confirmed) {
+                // Bei Bestätigung: Prüfe ob die Rasse bereits von einem anderen Spieler bestätigt wurde
+                const existingConfirmedRace = await db.query(
+                    'SELECT id, player_name FROM game_players WHERE game_id = ? AND race_id = ? AND player_name != ? AND race_confirmed = true',
+                    [gameId, raceId, playerName]
+                );
 
-            if (existingRaceSelection.length > 0) {
-                return { 
-                    success: false, 
-                    message: `Diese Rasse wurde bereits von ${existingRaceSelection[0].player_name} gewählt` 
-                };
+                if (existingConfirmedRace.length > 0) {
+                    return { 
+                        success: false, 
+                        message: `Diese Rasse wurde bereits von ${existingConfirmedRace[0].player_name} bestätigt` 
+                    };
+                }
+
+                // Speichere die bestätigte Rassenwahl in der Datenbank
+                await db.query(
+                    'UPDATE game_players SET race_id = ?, race_confirmed = true WHERE game_id = ? AND player_name = ?',
+                    [raceId, gameId, playerName]
+                );
+
+                console.log(`✅ Race ${race[0].name} confirmed by player ${playerName}`);
+            } else {
+                // Nur Auswahl speichern (nicht bestätigt)
+                await db.query(
+                    'UPDATE game_players SET race_id = ?, race_confirmed = false WHERE game_id = ? AND player_name = ?',
+                    [raceId, gameId, playerName]
+                );
+
+                console.log(`🤔 Race ${race[0].name} selected (not confirmed) by player ${playerName}`);
             }
 
-            // Speichere die Rassenwahl in der Datenbank
-            await db.query(
-                'UPDATE game_players SET race_id = ? WHERE game_id = ? AND player_name = ?',
-                [raceId, gameId, playerName]
-            );
-
-            console.log(`✓ Race ${race[0].name} assigned to player ${playerName}`);
-
-            // Prüfe ob alle Spieler eine Rasse gewählt haben
+            // Prüfe Status der Rassenwahlen
             const raceSelectionStatus = await db.query(`
                 SELECT 
                     COUNT(*) as total_players,
+                    SUM(CASE WHEN race_id IS NOT NULL AND race_confirmed = true THEN 1 ELSE 0 END) as races_confirmed,
                     SUM(CASE WHEN race_id IS NOT NULL THEN 1 ELSE 0 END) as races_selected,
-                    GROUP_CONCAT(CONCAT(player_name, ':', COALESCE(race_id, 'null')) SEPARATOR ', ') as player_status
+                    GROUP_CONCAT(
+                        CONCAT(player_name, ':', COALESCE(race_id, 'null'), ':', COALESCE(race_confirmed, 'false')) 
+                        SEPARATOR ', '
+                    ) as player_status
                 FROM game_players 
                 WHERE game_id = ? AND is_active = true
             `, [gameId]);
 
             const status = raceSelectionStatus[0];
-            const allRacesSelected = status.races_selected === status.total_players;
+            const allRacesConfirmed = status.races_confirmed === status.total_players;
 
             console.log(`Race selection status for game ${gameId}:`, {
                 totalPlayers: status.total_players,
                 racesSelected: status.races_selected,
-                allRacesSelected: allRacesSelected,
+                racesConfirmed: status.races_confirmed,
+                allRacesConfirmed: allRacesConfirmed,
                 playerStatus: status.player_status
             });
 
@@ -96,9 +112,11 @@ class GameController {
                 raceName: race[0].name,
                 raceId: raceId,
                 playerName: playerName,
-                allRacesSelected: allRacesSelected,
+                confirmed: confirmed,
+                allRacesConfirmed: allRacesConfirmed,
                 totalPlayers: status.total_players,
-                racesSelected: status.races_selected
+                racesSelected: status.races_selected,
+                racesConfirmed: status.races_confirmed
             };
 
         } catch (error) {

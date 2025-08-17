@@ -172,6 +172,8 @@ class LobbyManager {
         });
 
         this.socket.on('player_race_selected', (data) => {
+            console.log('Player race selected event:', data);
+            
             // Update local tracking of player selections (live updates)
             this.playersRaceStatus.set(data.playerName, {
                 playerName: data.playerName,
@@ -184,12 +186,14 @@ class LobbyManager {
                 showNotification(`${data.playerName} wählt ${data.raceName}`, 'info');
             }
             
-            // Update both player status and race cards for live feedback
+            // Immediately update both displays for live feedback
             this.updatePlayersRaceStatus();
             this.updateRaceCardsDisplay();
         });
 
         this.socket.on('player_race_confirmed', (data) => {
+            console.log('Player race confirmed event:', data);
+            
             // Update player status to confirmed
             const playerStatus = this.playersRaceStatus.get(data.playerName);
             if (playerStatus) {
@@ -202,13 +206,14 @@ class LobbyManager {
                 showNotification(`${data.playerName} hat ${data.raceName} bestätigt`, 'success');
             }
             
+            // Immediately update displays
             this.updatePlayersRaceStatus();
             this.updateRaceCardsDisplay();
             this.updateRaceSelectionStatus(data.confirmedCount, data.totalPlayers);
         });
 
         this.socket.on('player_race_deselected', (data) => {
-            console.log('Player race deselected:', data);
+            console.log('Player race deselected event:', data);
             
             // Update local tracking - player deselected race
             const playerStatus = this.playersRaceStatus.get(data.playerName);
@@ -223,6 +228,7 @@ class LobbyManager {
                 showNotification(`${data.playerName} hat ${action}`, 'info');
             }
             
+            // Immediately update displays
             this.updatePlayersRaceStatus();
             this.updateRaceCardsDisplay();
         });
@@ -760,6 +766,8 @@ class LobbyManager {
             return;
         }
 
+        // Allow selection of any race - multiple players can choose the same race
+
         // Update UI to show new selection
         document.querySelectorAll('.race-card').forEach(card => {
             if (card.classList.contains('own-selection')) {
@@ -799,21 +807,32 @@ class LobbyManager {
     }
 
     updateRaceCardsDisplay() {
-        // Reset all race cards
+        console.log('Updating race cards display');
+        
+        // Reset all race cards but keep click functionality
         document.querySelectorAll('.race-card').forEach(card => {
             // Remove all player indicators
             const indicators = card.querySelectorAll('.race-players-indicator');
             indicators.forEach(indicator => indicator.remove());
             
-            // Reset classes (keep own selection)
-            const isOwnSelection = card.classList.contains('own-selection');
+            // Reset classes but keep base functionality
+            const raceId = parseInt(card.dataset.raceId);
             card.className = 'race-card';
-            if (isOwnSelection && !this.raceConfirmed) {
-                card.classList.add('own-selection');
+            
+            // Restore own selection state if applicable
+            if (this.selectedRaceId === raceId) {
+                if (this.raceConfirmed) {
+                    card.classList.add('own-confirmed');
+                } else {
+                    card.classList.add('own-selection');
+                }
             }
+            
+            // Ensure card is always clickable
+            card.style.pointerEvents = '';
         });
 
-        // Group players by race
+        // Group players by race for display
         const raceGroups = new Map();
         this.playersRaceStatus.forEach((status, playerName) => {
             if (status.selectedRaceId) {
@@ -824,7 +843,7 @@ class LobbyManager {
             }
         });
 
-        // Add indicators for each race
+        // Add indicators for each race that has players
         raceGroups.forEach((players, raceId) => {
             const raceCard = document.querySelector(`[data-race-id="${raceId}"]`);
             if (raceCard) {
@@ -856,6 +875,7 @@ class LobbyManager {
                     font-size: 0.7rem;
                     text-align: center;
                     border-radius: 0 0 6px 6px;
+                    line-height: 1.2;
                 `;
                 
                 raceCard.style.position = 'relative';
@@ -864,20 +884,12 @@ class LobbyManager {
                 // Add visual styling based on selection status
                 if (confirmedPlayers.length > 0) {
                     raceCard.classList.add('has-confirmed-players');
-                } else {
+                }
+                if (unconfirmedPlayers.length > 0) {
                     raceCard.classList.add('has-selecting-players');
                 }
             }
         });
-
-        // Mark own confirmed race
-        if (this.raceConfirmed && this.selectedRaceId) {
-            const ownCard = document.querySelector(`[data-race-id="${this.selectedRaceId}"]`);
-            if (ownCard) {
-                ownCard.classList.remove('own-selection');
-                ownCard.classList.add('own-confirmed');
-            }
-        }
     }
     
     confirmRaceSelection() {

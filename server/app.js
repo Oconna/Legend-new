@@ -20,6 +20,312 @@ const io = socketIo(server, {
         origin: "*",
         methods: ["GET", "POST"]
     },
+    // Enhanced Socket.IO server configuration
+    pingTimeout: 60000,
+    pingInterval: 25000,
+    transports: ['websocket', 'polling'],
+    allowEIO3: true
+});
+
+// Middleware
+app.use(cors());
+app.use(express.json());
+app.use(express.static(path.join(__dirname, '../public')));
+
+// In-memory storage for active DB game players
+const dbGamePlayers = new Map(); // gameId -> Set of socketIds
+
+// In-memory storage for chat messages and players
+const chatRooms = new Map(); // gameId -> { messages: [], players: Set() }
+
+// Helper function to get or create chat room
+function getChatRoom(gameId) {
+    if (!chatRooms.has(gameId)) {
+        chatRooms.set(gameId, {
+            messages: [],
+            players: new Set(),
+            createdAt: new Date()
+        });
+    }
+    return chatRooms.get(gameId);
+}
+
+// Helper function to add chat message to history
+function addChatMessage(gameId, playerName, message, playerId = null) {
+    const chatRoom = getChatRoom(gameId);
+    const chatMessage = {
+        id: Date.now() + Math.random(), // Simple unique ID
+        playerName: playerName,
+        message: message,
+        timestamp: Date.now(),
+        playerId: playerId
+    };
+    
+    chatRoom.messages.push(chatMessage);
+    
+    // Keep only last 100 messages per room
+    if (chatRoom.messages.length > 100) {
+        chatRoom.messages.shift();
+    }
+    
+    return chatMessage;
+}
+
+// Helper function to validate chat message
+function validateChatMessage(message) {
+    if (!message || typeof message !== 'string') {
+        return { valid: false, reason: 'Nachricht ist leer oder ungültig' };
+    }
+    
+    const trimmed = message.trim();
+    if (trimmed.length === 0) {
+        return { valid: false, reason: 'Nachricht ist leer' };
+    }
+    
+    if (trimmed.length > 500) {
+        return { valid: false, reason: 'Nachricht ist zu lang (max. 500 Zeichen)' };
+    }
+    
+    // Basic profanity filter (erweitere nach Bedarf)
+    const profanityWords = ['spam', 'test123spam']; // Beispiel-Wörter
+    const containsProfanity = profanityWords.some(word => 
+        trimmed.toLowerCase().includes(word.toLowerCase())
+    );
+    
+    if (containsProfanity) {
+        return { valid: false, reason: 'Nachricht enthält nicht erlaubte Wörter' };
+    }
+    
+    return { valid: true, message: trimmed };
+}
+
+// Routes
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, '../public/index.html'));
+});
+
+app.get('/game/:gameId', (req, res) => {
+    res.sendFile(path.join(__dirname, '../public/game.html'));
+});
+
+// API Routes
+app.get('/api/test', async (req, res) => {
+    try {
+        const testResult = await db.query('SELECT 1 as test');
+        const races = await db.query('SELECT COUNT(*) as count FROM races');
+        
+        res.json({
+            status: 'OK',
+            database: 'Connected',
+            testQuery: testResult,
+            racesCount: races[0].count,
+            memoryGames: improvedLobbyManager.games.size,
+            memoryPlayers: improvedLobbyManager.players.size,
+            dbGamePlayers: dbGamePlayers.size,
+            chatRooms: chatRooms.size,
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        console.error('API Test Error:', error);
+        res.status(500).json({
+            status: 'ERROR',
+            error: error.message
+        });
+    }
+});
+
+app.get('/api/games', async (req, res) => {
+    try {
+        // Get memory-based waiting games
+        const memoryGames = improvedLobbyManager.getAvailableGames();
+        
+        // Get database-based active games (optional, for running games)
+        let dbGames = [];
+        try {
+            dbGames = await db.query(`
+                SELECT 
+                    g.id,
+                    g.name,
+                    g.max_players,
+                    g.current_players,
+                    g.map_size,
+                    g.status,
+                    g.created_at
+                FROM games g
+                WHERE g.status IN ('race_selection', 'playing')
+                ORDER BY g.created_at DESC
+            `);
+        } catch (dbError) {
+            console.log('DB games query failed, using memory only');
+        }
+        
+        res.json([...memoryGames, ...dbGames]);
+    } catch (error) {
+        console.error('Error in /api/games:', error);
+        res.status(500).json({ error: 'Fehler beim Laden der Spiele: ' + error.message });
+    }
+});
+
+app.get('/api/races', async (req, res) => {
+    try {
+        const races = await db.query('SELECT * FROM races ORDER BY name');
+        res.json(races);
+    } catch (error) {
+        console.error('Error in /api/races:', error);
+        res.status(500).json({ error: 'Fehler beim Laden der Rassen: ' + error.message });
+    }
+});
+
+app.get('/api/game/:gameId/race-selections', async (req, res) => {
+    try {
+        const gameId = parseInt(req.params.gameId);
+        const result = await gameController.getAllRaceSelections(gameId);
+        
+        if (result.success) {
+            res.json({
+                gameId: gameId,
+                selections: result.selections,
+                timestamp: new Date().toISOString()
+            });
+        } else {
+            res.status(404).json({ error: result.message });
+        }
+    } catch (error) {
+        console.error('Error in race selections API:', error);
+        res.status(500).json({ error: 'Fehler beim Abrufen der Rassenwahlen: ' + error.message });
+    }
+});
+
+app.get('/api/game/:gameId/status', async (req, res) => {
+    try {
+        const gameId = parseInt(req.params.gameId);
+        const gameState = await gameController.getGameState(gameId);
+        
+        if (gameState) {
+            res.json({
+                gameId: gameId,
+                status: gameState.game.status,
+                playerCount: gameState.players.length,
+                players: gameState.players.map(p => ({
+                    name: p.player_name,
+                    race: p.race_name,
+                    raceId: p.race_id,
+                    color: p.race_color
+                })),
+                timestamp: new Date().toISOString()
+            });
+        } else {
+            res.status(404).json({ error: 'Spiel nicht gefunden' });
+        }
+    } catch (error) {
+        console.error('Error in game status API:', error);
+        res.status(500).json({ error: 'Fehler beim Abrufen des Spielstatus: ' + error.message });
+    }
+});
+
+app.get('/api/game/:gameId/chat', async (req, res) => {
+    try {
+        const gameId = parseInt(req.params.gameId);
+        const chatRoom = getChatRoom(gameId);
+        
+        res.json({
+            gameId: gameId,
+            messages: chatRoom.messages,
+            playerCount: chatRoom.players.size,
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        console.error('Error in chat API:', error);
+        res.status(500).json({ error: 'Fehler beim Abrufen des Chats: ' + error.message });
+    }
+});
+
+// Helper function to broadcast race selection sync to all players in a game
+async function broadcastRaceSelectionSync(gameId) {
+    try {
+        const result = await gameController.getAllRaceSelections(gameId);
+        if (result.success) {
+            io.to(`db_game_${gameId}`).emit('race_selection_sync', {
+                gameId: gameId,
+                selections: result.selections,
+                timestamp: new Date().toISOString()
+            });
+            console.log(`✓ Race selection sync broadcasted for game ${gameId}`);
+        }
+    } catch (error) {
+        console.error('Error broadcasting race selection sync:', error);
+    }
+}
+
+// Socket.IO Connection Handling
+io.on('connection', (socket) => {
+    console.log(`Neuer Spieler verbunden: ${socket.id}`);
+
+    // Send initial games list and setup periodic updates
+    socket.emit('games_updated', improvedLobbyManager.getAvailableGames());
+    
+    // Send game list updates every 30 seconds to ensure sync
+    const gameListInterval = setInterval(() => {
+        socket.emit('games_updated', improvedLobbyManager.getAvailableGames());
+    }, 30000);
+
+    // NEW: Heartbeat handling
+    socket.on('heartbeat', (data) => {
+        socket.emit('heartbeat_response', {
+            timestamp: Date.now(),
+            playerName: data.playerName,
+            gameDbId: data.gameDbId
+        });
+        
+        // Update last seen time for this player
+        socket.lastSeen = Date.now();
+    });
+
+    // NEW: Rejoin DB game room after reconnection
+    socket.on('rejoin_db_game_room', async (data) => {
+        try {
+            console.log(`Player ${data.playerName} rejoining DB game room ${data.gameId}`);
+            
+            // Join the room
+            socket.join(`db_game_${data.gameId}`);
+            
+            // Add to tracking
+            if (!dbGamePlayers.has(data.gameId)) {
+                dbGamePlayers.set(data.gameId, new Set());
+            }
+            dbGamePlayers.get(data.gameId).add(socket.id);
+            
+            // Send current race selection status
+            await broadcastRaceSelectionSync(data.gameId);
+            
+        } catch (error) {
+            console.error('Error rejoining DB game room:', error);
+            socket.emit('error', 'Fehler beim Wiederverbinden');
+        }
+    });
+
+    // NEW: Request race selection sync
+    socket.on('request_race_selection_sync', async (data) => {
+        try {
+            console.log(`Race selection sync requested by ${data.playerName} for game ${data.gameId}`);
+            
+            const result = await gameController.getAllRaceSelections(data.gameId);
+            if (result.success) {
+                socket.emit('race_deselection_confirmed', {
+                    message: 'Rassenauswahl zurückgesetzt'
+                });
+
+                // Broadcast updated race selection sync
+                await broadcastRaceSelectionSync(data.gameId);
+            } else {
+                socket.emit('error', result.message);
+            }
+        } catch (error) {
+            console.error('Error in deselect_race:', error);
+            socket.emit('error', 'Fehler bei der Rassenabwahl');
+        }
+    });
+
     // Get current race selections for a game
     socket.on('get_race_selections', async (data) => {
         try {
@@ -676,298 +982,7 @@ server.listen(PORT, () => {
     console.log(`⚡ Echtzeit-Multiplayer funktionsfähig`);
     console.log(`💾 Spieldaten werden persistent gespeichert`);
     console.log(`\n🔥 Ready to conquer the battlefield! 🔥`);
-}); Enhanced Socket.IO server configuration
-    pingTimeout: 60000,
-    pingInterval: 25000,
-    transports: ['websocket', 'polling'],
-    allowEIO3: true
-});
-
-// Middleware
-app.use(cors());
-app.use(express.json());
-app.use(express.static(path.join(__dirname, '../public')));
-
-// In-memory storage for active DB game players
-const dbGamePlayers = new Map(); // gameId -> Set of socketIds
-
-// In-memory storage for chat messages and players
-const chatRooms = new Map(); // gameId -> { messages: [], players: Set() }
-
-// Helper function to get or create chat room
-function getChatRoom(gameId) {
-    if (!chatRooms.has(gameId)) {
-        chatRooms.set(gameId, {
-            messages: [],
-            players: new Set(),
-            createdAt: new Date()
-        });
-    }
-    return chatRooms.get(gameId);
-}
-
-// Helper function to add chat message to history
-function addChatMessage(gameId, playerName, message, playerId = null) {
-    const chatRoom = getChatRoom(gameId);
-    const chatMessage = {
-        id: Date.now() + Math.random(), // Simple unique ID
-        playerName: playerName,
-        message: message,
-        timestamp: Date.now(),
-        playerId: playerId
-    };
-    
-    chatRoom.messages.push(chatMessage);
-    
-    // Keep only last 100 messages per room
-    if (chatRoom.messages.length > 100) {
-        chatRoom.messages.shift();
-    }
-    
-    return chatMessage;
-}
-
-// Helper function to validate chat message
-function validateChatMessage(message) {
-    if (!message || typeof message !== 'string') {
-        return { valid: false, reason: 'Nachricht ist leer oder ungültig' };
-    }
-    
-    const trimmed = message.trim();
-    if (trimmed.length === 0) {
-        return { valid: false, reason: 'Nachricht ist leer' };
-    }
-    
-    if (trimmed.length > 500) {
-        return { valid: false, reason: 'Nachricht ist zu lang (max. 500 Zeichen)' };
-    }
-    
-    // Basic profanity filter (erweitere nach Bedarf)
-    const profanityWords = ['spam', 'test123spam']; // Beispiel-Wörter
-    const containsProfanity = profanityWords.some(word => 
-        trimmed.toLowerCase().includes(word.toLowerCase())
-    );
-    
-    if (containsProfanity) {
-        return { valid: false, reason: 'Nachricht enthält nicht erlaubte Wörter' };
-    }
-    
-    return { valid: true, message: trimmed };
-}
-
-// Routes
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, '../public/index.html'));
-});
-
-app.get('/game/:gameId', (req, res) => {
-    res.sendFile(path.join(__dirname, '../public/game.html'));
-});
-
-// API Routes
-app.get('/api/test', async (req, res) => {
-    try {
-        const testResult = await db.query('SELECT 1 as test');
-        const races = await db.query('SELECT COUNT(*) as count FROM races');
-        
-        res.json({
-            status: 'OK',
-            database: 'Connected',
-            testQuery: testResult,
-            racesCount: races[0].count,
-            memoryGames: improvedLobbyManager.games.size,
-            memoryPlayers: improvedLobbyManager.players.size,
-            dbGamePlayers: dbGamePlayers.size,
-            chatRooms: chatRooms.size,
-            timestamp: new Date().toISOString()
-        });
-    } catch (error) {
-        console.error('API Test Error:', error);
-        res.status(500).json({
-            status: 'ERROR',
-            error: error.message
-        });
-    }
-});
-
-app.get('/api/games', async (req, res) => {
-    try {
-        // Get memory-based waiting games
-        const memoryGames = improvedLobbyManager.getAvailableGames();
-        
-        // Get database-based active games (optional, for running games)
-        let dbGames = [];
-        try {
-            dbGames = await db.query(`
-                SELECT 
-                    g.id,
-                    g.name,
-                    g.max_players,
-                    g.current_players,
-                    g.map_size,
-                    g.status,
-                    g.created_at
-                FROM games g
-                WHERE g.status IN ('race_selection', 'playing')
-                ORDER BY g.created_at DESC
-            `);
-        } catch (dbError) {
-            console.log('DB games query failed, using memory only');
-        }
-        
-        res.json([...memoryGames, ...dbGames]);
-    } catch (error) {
-        console.error('Error in /api/games:', error);
-        res.status(500).json({ error: 'Fehler beim Laden der Spiele: ' + error.message });
-    }
-});
-
-app.get('/api/races', async (req, res) => {
-    try {
-        const races = await db.query('SELECT * FROM races ORDER BY name');
-        res.json(races);
-    } catch (error) {
-        console.error('Error in /api/races:', error);
-        res.status(500).json({ error: 'Fehler beim Laden der Rassen: ' + error.message });
-    }
-});
-
-app.get('/api/game/:gameId/race-selections', async (req, res) => {
-    try {
-        const gameId = parseInt(req.params.gameId);
-        const result = await gameController.getAllRaceSelections(gameId);
-        
-        if (result.success) {
-            res.json({
-                gameId: gameId,
-                selections: result.selections,
-                timestamp: new Date().toISOString()
-            });
-        } else {
-            res.status(404).json({ error: result.message });
-        }
-    } catch (error) {
-        console.error('Error in race selections API:', error);
-        res.status(500).json({ error: 'Fehler beim Abrufen der Rassenwahlen: ' + error.message });
-    }
-});
-
-app.get('/api/game/:gameId/status', async (req, res) => {
-    try {
-        const gameId = parseInt(req.params.gameId);
-        const gameState = await gameController.getGameState(gameId);
-        
-        if (gameState) {
-            res.json({
-                gameId: gameId,
-                status: gameState.game.status,
-                playerCount: gameState.players.length,
-                players: gameState.players.map(p => ({
-                    name: p.player_name,
-                    race: p.race_name,
-                    raceId: p.race_id,
-                    color: p.race_color
-                })),
-                timestamp: new Date().toISOString()
-            });
-        } else {
-            res.status(404).json({ error: 'Spiel nicht gefunden' });
-        }
-    } catch (error) {
-        console.error('Error in game status API:', error);
-        res.status(500).json({ error: 'Fehler beim Abrufen des Spielstatus: ' + error.message });
-    }
-});
-
-app.get('/api/game/:gameId/chat', async (req, res) => {
-    try {
-        const gameId = parseInt(req.params.gameId);
-        const chatRoom = getChatRoom(gameId);
-        
-        res.json({
-            gameId: gameId,
-            messages: chatRoom.messages,
-            playerCount: chatRoom.players.size,
-            timestamp: new Date().toISOString()
-        });
-    } catch (error) {
-        console.error('Error in chat API:', error);
-        res.status(500).json({ error: 'Fehler beim Abrufen des Chats: ' + error.message });
-    }
-});
-
-// Helper function to broadcast race selection sync to all players in a game
-async function broadcastRaceSelectionSync(gameId) {
-    try {
-        const result = await gameController.getAllRaceSelections(gameId);
-        if (result.success) {
-            io.to(`db_game_${gameId}`).emit('race_selection_sync', {
-                gameId: gameId,
-                selections: result.selections,
-                timestamp: new Date().toISOString()
-            });
-            console.log(`✓ Race selection sync broadcasted for game ${gameId}`);
-        }
-    } catch (error) {
-        console.error('Error broadcasting race selection sync:', error);
-    }
-}
-
-// Socket.IO Connection Handling
-io.on('connection', (socket) => {
-    console.log(`Neuer Spieler verbunden: ${socket.id}`);
-
-    // Send initial games list and setup periodic updates
-    socket.emit('games_updated', improvedLobbyManager.getAvailableGames());
-    
-    // Send game list updates every 30 seconds to ensure sync
-    const gameListInterval = setInterval(() => {
-        socket.emit('games_updated', improvedLobbyManager.getAvailableGames());
-    }, 30000);
-
-    // NEW: Heartbeat handling
-    socket.on('heartbeat', (data) => {
-        socket.emit('heartbeat_response', {
-            timestamp: Date.now(),
-            playerName: data.playerName,
-            gameDbId: data.gameDbId
-        });
-        
-        // Update last seen time for this player
-        socket.lastSeen = Date.now();
-    });
-
-    // NEW: Rejoin DB game room after reconnection
-    socket.on('rejoin_db_game_room', async (data) => {
-        try {
-            console.log(`Player ${data.playerName} rejoining DB game room ${data.gameId}`);
-            
-            // Join the room
-            socket.join(`db_game_${data.gameId}`);
-            
-            // Add to tracking
-            if (!dbGamePlayers.has(data.gameId)) {
-                dbGamePlayers.set(data.gameId, new Set());
-            }
-            dbGamePlayers.get(data.gameId).add(socket.id);
-            
-            // Send current race selection status
-            await broadcastRaceSelectionSync(data.gameId);
-            
-        } catch (error) {
-            console.error('Error rejoining DB game room:', error);
-            socket.emit('error', 'Fehler beim Wiederverbinden');
-        }
-    });
-
-    // NEW: Request race selection sync
-    socket.on('request_race_selection_sync', async (data) => {
-        try {
-            console.log(`Race selection sync requested by ${data.playerName} for game ${data.gameId}`);
-            
-            const result = await gameController.getAllRaceSelections(data.gameId);
-            if (result.success) {
-                socket.emit('race_selection_sync', {
+});('race_selection_sync', {
                     gameId: data.gameId,
                     selections: result.selections,
                     timestamp: new Date().toISOString()
@@ -1445,19 +1460,4 @@ io.on('connection', (socket) => {
                     wasConfirmed: result.wasConfirmed
                 });
                 
-                socket.emit('race_deselection_confirmed', {
-                    message: 'Rassenauswahl zurückgesetzt'
-                });
-
-                // Broadcast updated race selection sync
-                await broadcastRaceSelectionSync(data.gameId);
-            } else {
-                socket.emit('error', result.message);
-            }
-        } catch (error) {
-            console.error('Error in deselect_race:', error);
-            socket.emit('error', 'Fehler bei der Rassenabwahl');
-        }
-    });
-
-    //
+                socket.emit

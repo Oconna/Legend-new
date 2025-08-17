@@ -982,17 +982,7 @@ server.listen(PORT, () => {
     console.log(`⚡ Echtzeit-Multiplayer funktionsfähig`);
     console.log(`💾 Spieldaten werden persistent gespeichert`);
     console.log(`\n🔥 Ready to conquer the battlefield! 🔥`);
-});('race_selection_sync', {
-                    gameId: data.gameId,
-                    selections: result.selections,
-                    timestamp: new Date().toISOString()
-                });
-            }
-        } catch (error) {
-            console.error('Error sending race selection sync:', error);
-            socket.emit('error', 'Fehler beim Synchronisieren der Rassenwahlen');
-        }
-    });
+});
 
     // Chat Event Handlers
     // Join chat room

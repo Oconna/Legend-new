@@ -105,38 +105,81 @@
             </section>
         </main>
 
-        <!-- Race Selection Modal -->
+        <!-- Race Selection Modal with Chat -->
         <div id="raceSelectionModal" class="modal">
-            <div class="modal-content">
+            <div class="modal-content race-selection-modal">
                 <div class="modal-header">
                     <h3>Rassenwahl</h3>
                     <p>Wähle deine Rasse für das Spiel. Jede Rasse hat einzigartige Einheiten!</p>
                 </div>
                 <div class="modal-body">
-                    <div class="race-selection">
-                        <div id="racesList" class="races-grid">
-                            <!-- Races will be loaded here -->
-                        </div>
-                        <div class="race-info">
-                            <div id="selectedRaceInfo" class="selected-race-info">
-                                <p>Wähle eine Rasse aus der Liste oben.</p>
+                    <div class="race-selection-with-chat">
+                        <!-- Left side: Race Selection -->
+                        <div class="race-selection-panel">
+                            <div class="race-selection">
+                                <div id="racesList" class="races-grid">
+                                    <!-- Races will be loaded here -->
+                                </div>
+                                <div class="race-info">
+                                    <div id="selectedRaceInfo" class="selected-race-info">
+                                        <p>Wähle eine Rasse aus der Liste oben.</p>
+                                    </div>
+                                </div>
+                                <div class="race-selection-actions">
+                                    <button id="confirmRaceBtn" class="btn btn-success" disabled>
+                                        Rasse bestätigen
+                                    </button>
+                                    <button id="changeRaceBtn" class="btn btn-secondary" style="display: none;">
+                                        Rasse ändern
+                                    </button>
+                                </div>
+                                <div class="race-selection-status">
+                                    <p id="raceSelectionStatus">Wähle deine Rasse aus...</p>
+                                </div>
+                                <div class="race-players-status">
+                                    <h4>Spieler Status:</h4>
+                                    <div id="racePlayersStatus" class="players-race-status">
+                                        <!-- Player race status will be shown here -->
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                        <div class="race-selection-actions">
-                            <button id="confirmRaceBtn" class="btn btn-success" disabled>
-                                Rasse bestätigen
-                            </button>
-                            <button id="changeRaceBtn" class="btn btn-secondary" style="display: none;">
-                                Rasse ändern
-                            </button>
-                        </div>
-                        <div class="race-selection-status">
-                            <p id="raceSelectionStatus">Wähle deine Rasse aus...</p>
-                        </div>
-                        <div class="race-players-status">
-                            <h4>Spieler Status:</h4>
-                            <div id="racePlayersStatus" class="players-race-status">
-                                <!-- Player race status will be shown here -->
+
+                        <!-- Right side: Chat -->
+                        <div class="chat-panel">
+                            <div id="raceSelectionChat" class="race-chat" style="display: none;">
+                                <div class="chat-header">
+                                    <h4>💬 Chat</h4>
+                                    <span class="chat-info">
+                                        <span id="chatPlayerCount">0</span> Spieler online
+                                    </span>
+                                </div>
+                                <div class="chat-messages-container">
+                                    <div id="chatMessages" class="chat-messages">
+                                        <!-- Chat messages will be displayed here -->
+                                    </div>
+                                </div>
+                                <div class="chat-input-container">
+                                    <div class="chat-input-wrapper">
+                                        <textarea 
+                                            id="chatMessageInput" 
+                                            class="chat-input" 
+                                            placeholder="Schreibe eine Nachricht..."
+                                            maxlength="500"
+                                            rows="1"></textarea>
+                                        <button id="chatSendButton" class="chat-send-btn" title="Nachricht senden">
+                                            📤
+                                        </button>
+                                    </div>
+                                    <div class="chat-controls">
+                                        <small class="char-count">
+                                            <span id="chatCharCount">0</span>/500
+                                        </small>
+                                        <small class="chat-hint">
+                                            Enter zum Senden
+                                        </small>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -151,6 +194,7 @@
     <!-- Scripts -->
     <script src="/socket.io/socket.io.js"></script>
     <script src="js/utils.js"></script>
+    <script src="js/chat.js"></script>
     <script src="js/lobby.js"></script>
 </body>
 </html>

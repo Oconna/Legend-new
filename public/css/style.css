@@ -308,452 +308,554 @@ input:focus, select:focus {
     padding: 1.5rem;
 }
 
-/* Race Selection Improvements */
-.race-selection {
-    text-align: center;
+/* Chat System Styles for Race Selection Modal */
+
+/* Race Selection Modal with Chat Layout */
+.race-selection-modal .modal-content {
+    max-width: 1200px;
+    width: 95%;
+    height: 90vh;
+    max-height: 800px;
 }
 
-.race-selection > p {
-    margin-bottom: 1.5rem;
-    color: #7f8c8d;
+.race-selection-with-chat {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 1.5rem;
+    height: 100%;
+    min-height: 600px;
+}
+
+/* Race Selection Panel (Left Side) */
+.race-selection-panel {
+    display: flex;
+    flex-direction: column;
+    min-height: 0; /* Important for scrolling */
+}
+
+.race-selection-panel .races-grid {
+    max-height: 250px;
+    overflow-y: auto;
+    margin-bottom: 1rem;
+}
+
+/* Chat Panel (Right Side) */
+.chat-panel {
+    border-left: 2px solid #e9ecef;
+    padding-left: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+/* Race Chat Container */
+.race-chat {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background: #f8f9fa;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+/* Chat Header */
+.chat-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    background: #3498db;
+    color: white;
+    border-radius: 8px 8px 0 0;
+}
+
+.chat-header h4 {
+    margin: 0;
     font-size: 1.1rem;
 }
 
-.races-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 1rem;
-    margin-bottom: 1.5rem;
-    max-height: 300px;
+.chat-info {
+    font-size: 0.9rem;
+    opacity: 0.9;
+}
+
+/* Chat Messages Container */
+.chat-messages-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    background: white;
+}
+
+.chat-messages {
+    flex: 1;
+    padding: 1rem;
     overflow-y: auto;
-    padding: 0.5rem;
+    min-height: 300px;
+    max-height: 400px;
+    scroll-behavior: smooth;
 }
 
-.race-card {
-    background: #f8f9fa;
-    border: 2px solid #e9ecef;
+/* Chat Message Styles */
+.chat-message {
+    margin-bottom: 1rem;
+    padding: 0.75rem;
     border-radius: 8px;
-    padding: 1rem;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    text-align: center;
-    position: relative;
-    min-height: 120px;
-}
-
-/* All race cards should always be clickable */
-.race-card:hover {
-    border-color: #3498db;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-}
-
-.race-card.own-selection {
-    border-color: #f39c12;
-    background: #fef9e7;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(243, 156, 18, 0.3);
-}
-
-.race-card.own-confirmed {
-    border-color: #2ecc71;
-    background: #d5f4e6;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(46, 204, 113, 0.3);
-}
-
-.race-card.has-selecting-players {
-    border-color: #3498db;
-    background: #ebf3fd;
-}
-
-.race-card.has-confirmed-players {
-    border-color: #27ae60;
-    background: #e8f5e8;
-}
-
-/* Combined state: has both selecting and confirmed players */
-.race-card.has-selecting-players.has-confirmed-players {
-    border: 2px solid;
-    border-image: linear-gradient(45deg, #3498db, #27ae60) 1;
-    background: linear-gradient(45deg, #ebf3fd, #e8f5e8);
-}
-
-.race-color {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    margin: 0 auto 0.5rem;
-    border: 3px solid white;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-}
-
-.race-card h4 {
-    margin: 0.5rem 0;
-    color: #2c3e50;
-    font-size: 1rem;
-}
-
-.race-card p {
-    margin: 0;
-    color: #7f8c8d;
-    font-size: 0.85rem;
-    line-height: 1.3;
-}
-
-/* Remove old taken-indicator and confirmed-indicator styles completely */
-.race-players-indicator {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    background: rgba(52, 152, 219, 0.9);
-    color: white;
-    padding: 0.25rem;
-    font-size: 0.7rem;
-    text-align: center;
-    border-radius: 0 0 6px 6px;
-    font-weight: bold;
-    line-height: 1.2;
     word-wrap: break-word;
-    overflow-wrap: break-word;
+    animation: messageSlideIn 0.3s ease-out;
 }
 
-.race-info {
-    background: #f8f9fa;
-    border-radius: 8px;
-    padding: 1rem;
-    margin-bottom: 1rem;
-    min-height: 80px;
+.chat-message.own-message {
+    background: #e3f2fd;
+    border-left: 4px solid #2196f3;
+    margin-left: 1rem;
 }
 
-.selected-race-info h4 {
-    color: #f39c12;
-    margin-bottom: 0.5rem;
+.chat-message.other-message {
+    background: #f5f5f5;
+    border-left: 4px solid #4caf50;
+    margin-right: 1rem;
 }
 
-.selected-race-info h4.confirmed {
-    color: #2ecc71;
-}
-
-.selected-race-info p {
-    color: #34495e;
-    margin-bottom: 0.5rem;
-}
-
-.race-selection-actions {
-    display: flex;
-    gap: 1rem;
-    justify-content: center;
-    margin-bottom: 1rem;
-}
-
-.race-selection-status {
-    background: #3498db;
-    color: white;
-    padding: 0.75rem;
-    border-radius: 6px;
-    margin-bottom: 1rem;
-}
-
-.race-selection-status.confirmed {
-    background: #2ecc71;
-}
-
-.race-selection-status p {
-    margin: 0;
-    font-weight: bold;
-}
-
-.race-players-status {
-    background: #f8f9fa;
-    border-radius: 8px;
-    padding: 1rem;
-    text-align: left;
-}
-
-.race-players-status h4 {
-    margin-bottom: 1rem;
+.chat-message.system-message {
+    background: #fff3e0;
+    border-left: 4px solid #ff9800;
     text-align: center;
-    color: #2c3e50;
-}
-
-.players-race-status {
-    display: grid;
-    gap: 0.5rem;
-}
-
-.player-race-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0.5rem;
-    background: white;
-    border-radius: 4px;
-    border-left: 4px solid #bdc3c7;
-}
-
-.player-race-item.selecting {
-    border-left-color: #f39c12;
-}
-
-.player-race-item.confirmed {
-    border-left-color: #2ecc71;
-}
-
-.player-race-name {
-    font-weight: bold;
-    color: #2c3e50;
-}
-
-.player-race-status {
-    font-size: 0.9rem;
-    color: #7f8c8d;
-}
-
-.player-race-status.confirmed {
-    color: #2ecc71;
-    font-weight: bold;
-}
-
-.player-race-status.selecting {
-    color: #f39c12;
-    font-weight: bold;
-}
-
-/* Responsive for race selection */
-@media (max-width: 768px) {
-    .races-grid {
-        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-        gap: 0.75rem;
-    }
-    
-    .race-card {
-        padding: 0.75rem;
-        min-height: 100px;
-    }
-    
-    .race-color {
-        width: 30px;
-        height: 30px;
-    }
-    
-    .race-card h4 {
-        font-size: 0.9rem;
-    }
-    
-    .race-card p {
-        font-size: 0.8rem;
-    }
-    
-    .race-selection-actions {
-        flex-direction: column;
-        gap: 0.5rem;
-    }
-    
-    .race-players-indicator {
-        font-size: 0.6rem;
-        padding: 0.2rem;
-    }
-} translateY(-2px);
-    box-shadow: 0 4px 12px rgba(243, 156, 18, 0.3);
-}
-
-.race-card.confirmed {
-    border-color: #2ecc71;
-    background: #d5f4e6;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(46, 204, 113, 0.3);
-    cursor: not-allowed;
-}
-
-.race-card.unavailable {
-    opacity: 0.5;
-    cursor: not-allowed;
-    background: #ecf0f1;
-    border-color: #bdc3c7;
-}
-
-.race-card.unavailable:hover {
-    transform: none;
-    box-shadow: none;
-}
-
-.race-color {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    margin: 0 auto 0.5rem;
-    border: 3px solid white;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-}
-
-.race-card h4 {
+    font-style: italic;
     margin: 0.5rem 0;
-    color: #2c3e50;
-    font-size: 1rem;
+    padding: 0.5rem;
 }
 
-.race-card p {
-    margin: 0;
-    color: #7f8c8d;
-    font-size: 0.85rem;
-    line-height: 1.3;
+.chat-message.system-message.error {
+    background: #ffebee;
+    border-left-color: #f44336;
+    color: #d32f2f;
 }
 
-.taken-indicator {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    background: rgba(231, 76, 60, 0.9);
-    color: white;
-    padding: 0.25rem;
-    font-size: 0.7rem;
-    text-align: center;
-    border-radius: 6px 6px 0 0;
-    font-weight: bold;
-}
-
-.confirmed-indicator {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    background: rgba(46, 204, 113, 0.9);
-    color: white;
-    padding: 0.25rem;
-    font-size: 0.7rem;
-    text-align: center;
-    border-radius: 6px 6px 0 0;
-    font-weight: bold;
-}
-
-.race-info {
-    background: #f8f9fa;
-    border-radius: 8px;
-    padding: 1rem;
-    margin-bottom: 1rem;
-    min-height: 80px;
-}
-
-.selected-race-info h4 {
-    color: #f39c12;
-    margin-bottom: 0.5rem;
-}
-
-.selected-race-info h4.confirmed {
-    color: #2ecc71;
-}
-
-.selected-race-info p {
-    color: #34495e;
-    margin-bottom: 0.5rem;
-}
-
-.race-selection-actions {
-    display: flex;
-    gap: 1rem;
-    justify-content: center;
-    margin-bottom: 1rem;
-}
-
-.race-selection-status {
-    background: #3498db;
-    color: white;
-    padding: 0.75rem;
-    border-radius: 6px;
-    margin-bottom: 1rem;
-}
-
-.race-selection-status.confirmed {
-    background: #2ecc71;
-}
-
-.race-selection-status p {
-    margin: 0;
-    font-weight: bold;
-}
-
-.race-players-status {
-    background: #f8f9fa;
-    border-radius: 8px;
-    padding: 1rem;
-    text-align: left;
-}
-
-.race-players-status h4 {
-    margin-bottom: 1rem;
-    text-align: center;
-    color: #2c3e50;
-}
-
-.players-race-status {
-    display: grid;
-    gap: 0.5rem;
-}
-
-.player-race-item {
+.message-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 0.5rem;
-    background: white;
-    border-radius: 4px;
-    border-left: 4px solid #bdc3c7;
+    margin-bottom: 0.5rem;
 }
 
-.player-race-item.selecting {
-    border-left-color: #f39c12;
-}
-
-.player-race-item.confirmed {
-    border-left-color: #2ecc71;
-}
-
-.player-race-name {
+.player-name {
     font-weight: bold;
     color: #2c3e50;
+    font-size: 0.9rem;
 }
 
-.player-race-status {
-    font-size: 0.9rem;
+.message-time {
+    font-size: 0.8rem;
     color: #7f8c8d;
 }
 
-.player-race-status.confirmed {
-    color: #2ecc71;
+.message-content {
+    color: #34495e;
+    line-height: 1.4;
+    font-size: 0.9rem;
+}
+
+.system-text {
+    color: #e67e22;
+    font-weight: 500;
+}
+
+/* Chat Input Container */
+.chat-input-container {
+    padding: 1rem;
+    background: #f8f9fa;
+    border-top: 1px solid #dee2e6;
+    border-radius: 0 0 8px 8px;
+}
+
+.chat-input-wrapper {
+    display: flex;
+    gap: 0.5rem;
+    align-items: flex-end;
+}
+
+.chat-input {
+    flex: 1;
+    border: 2px solid #dee2e6;
+    border-radius: 6px;
+    padding: 0.75rem;
+    font-family: inherit;
+    font-size: 0.9rem;
+    resize: none;
+    min-height: 40px;
+    max-height: 100px;
+    transition: border-color 0.3s ease;
+}
+
+.chat-input:focus {
+    outline: none;
+    border-color: #3498db;
+    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+}
+
+.chat-send-btn {
+    background: #3498db;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 0.75rem;
+    cursor: pointer;
+    font-size: 1rem;
+    min-width: 50px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+}
+
+.chat-send-btn:hover {
+    background: #2980b9;
+    transform: translateY(-1px);
+}
+
+.chat-send-btn:active {
+    transform: translateY(0);
+}
+
+.chat-send-btn:disabled {
+    background: #bdc3c7;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.chat-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 0.5rem;
+}
+
+.char-count {
+    color: #7f8c8d;
+    font-size: 0.8rem;
+}
+
+.char-count.warning {
+    color: #e67e22;
+}
+
+.char-count.danger {
+    color: #e74c3c;
     font-weight: bold;
 }
 
-/* Responsive for race selection */
+.chat-hint {
+    color: #95a5a6;
+    font-size: 0.8rem;
+}
+
+/* Chat Animations */
+@keyframes messageSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Scrollbar Styling for Chat */
+.chat-messages::-webkit-scrollbar {
+    width: 6px;
+}
+
+.chat-messages::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 3px;
+}
+
+.chat-messages::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 3px;
+}
+
+.chat-messages::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
+}
+
+/* Responsive Design for Chat */
+@media (max-width: 1024px) {
+    .race-selection-with-chat {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
+    
+    .chat-panel {
+        border-left: none;
+        border-top: 2px solid #e9ecef;
+        padding-left: 0;
+        padding-top: 1rem;
+        max-height: 300px;
+    }
+    
+    .race-chat {
+        max-height: 300px;
+    }
+    
+    .chat-messages {
+        max-height: 200px;
+        min-height: 200px;
+    }
+}
+
 @media (max-width: 768px) {
-    .races-grid {
-        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-        gap: 0.75rem;
+    .race-selection-modal .modal-content {
+        width: 98%;
+        height: 95vh;
+        margin: 2.5vh auto;
     }
     
-    .race-card {
+    .race-selection-with-chat {
+        gap: 0.5rem;
+    }
+    
+    .chat-panel {
+        padding-top: 0.5rem;
+    }
+    
+    .chat-header {
         padding: 0.75rem;
-        min-height: 100px;
     }
     
-    .race-color {
-        width: 30px;
-        height: 30px;
+    .chat-messages {
+        padding: 0.75rem;
+        max-height: 150px;
+        min-height: 150px;
     }
     
-    .race-card h4 {
-        font-size: 0.9rem;
+    .chat-input-container {
+        padding: 0.75rem;
     }
     
-    .race-card p {
+    .chat-input-wrapper {
+        gap: 0.25rem;
+    }
+    
+    .chat-input {
+        padding: 0.5rem;
         font-size: 0.8rem;
     }
     
-    .race-selection-actions {
-        flex-direction: column;
-        gap: 0.5rem;
+    .chat-send-btn {
+        padding: 0.5rem;
+        min-width: 40px;
+        height: 35px;
+        font-size: 0.9rem;
+    }
+}
+
+/* Chat Loading States */
+.chat-loading {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 2rem;
+    color: #7f8c8d;
+    font-style: italic;
+}
+
+.chat-offline {
+    background: #ecf0f1;
+    color: #7f8c8d;
+    text-align: center;
+    padding: 1rem;
+    border-radius: 8px;
+    margin: 1rem;
+}
+
+/* Chat Empty State */
+.chat-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    color: #7f8c8d;
+    text-align: center;
+}
+
+.chat-empty-icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    opacity: 0.5;
+}
+
+/* Enhanced Message Types */
+.chat-message.join-message {
+    background: #e8f5e8;
+    border-left-color: #4caf50;
+    color: #2e7d32;
+}
+
+.chat-message.leave-message {
+    background: #fff3e0;
+    border-left-color: #ff9800;
+    color: #f57c00;
+}
+
+.chat-message.error-message {
+    background: #ffebee;
+    border-left-color: #f44336;
+    color: #d32f2f;
+}
+
+/* Chat Status Indicators */
+.chat-status {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #4caf50;
+}
+
+.chat-status.offline {
+    background: #f44336;
+}
+
+.chat-status.connecting {
+    background: #ff9800;
+    animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+/* Message Reactions (for future enhancement) */
+.message-reactions {
+    display: flex;
+    gap: 0.25rem;
+    margin-top: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.reaction {
+    background: #ecf0f1;
+    border: 1px solid #bdc3c7;
+    border-radius: 12px;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.reaction:hover {
+    background: #d5dbdb;
+}
+
+.reaction.active {
+    background: #3498db;
+    color: white;
+    border-color: #2980b9;
+}
+
+/* Chat Typing Indicator */
+.typing-indicator {
+    padding: 0.5rem 1rem;
+    color: #7f8c8d;
+    font-style: italic;
+    font-size: 0.8rem;
+    background: #f8f9fa;
+    border-top: 1px solid #dee2e6;
+    display: none;
+}
+
+.typing-indicator.active {
+    display: block;
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+/* Typing dots animation */
+.typing-dots {
+    display: inline-block;
+}
+
+.typing-dots::after {
+    content: '';
+    animation: typingDots 1.5s infinite;
+}
+
+@keyframes typingDots {
+    0%, 60% { content: ''; }
+    25% { content: '.'; }
+    35% { content: '..'; }
+    45% { content: '...'; }
+}
+
+/* Message Links and Mentions */
+.message-content a {
+    color: #3498db;
+    text-decoration: none;
+}
+
+.message-content a:hover {
+    text-decoration: underline;
+}
+
+.mention {
+    background: #e3f2fd;
+    color: #1976d2;
+    padding: 0.1rem 0.3rem;
+    border-radius: 3px;
+    font-weight: bold;
+}
+
+/* Chat Moderation */
+.message-deleted {
+    opacity: 0.6;
+    font-style: italic;
+    color: #7f8c8d;
+}
+
+.message-deleted .message-content::before {
+    content: '🗑️ ';
+}
+
+/* Chat Settings */
+.chat-settings {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    z-index: 10;
+}
+
+.chat-settings-btn {
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    color: white;
+    padding: 0.5rem;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: background 0.3s ease;
+}
+
+.chat-settings-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+/* Print Styles */
+@media print {
+    .race-chat {
+        display: none !important;
     }
 }
 

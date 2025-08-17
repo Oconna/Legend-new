@@ -1,4 +1,4 @@
-// Lobby JavaScript - Frontend logic with improved connection handling
+// Lobby JavaScript - Frontend logic with improved connection handling and chat
 
 class LobbyManager {
     constructor() {
@@ -17,6 +17,7 @@ class LobbyManager {
         this.reconnectAttempts = 0;
         this.maxReconnectAttempts = 10;
         this.heartbeatInterval = null;
+        this.chatManager = null; // Chat system
         
         this.init();
     }
@@ -28,7 +29,41 @@ class LobbyManager {
         this.loadAvailableGames();
         this.loadRaces();
         this.startHeartbeat();
+        this.initializeChat();
     }
+
+    // Initialize chat system
+    initializeChat() {
+        if (window.ChatManager && !this.chatManager) {
+            this.chatManager = new window.ChatManager();
+            console.log('Chat manager created');
+        }
+    }
+
+    // Setup character counter for chat input
+    setupChatCharacterCounter() {
+        const chatInput = document.getElementById('chatMessageInput');
+        const charCount = document.getElementById('chatCharCount');
+        
+        if (chatInput && charCount) {
+            chatInput.addEventListener('input', () => {
+                const currentLength = chatInput.value.length;
+                const maxLength = 500;
+                
+                charCount.textContent = currentLength;
+                
+                // Update character counter styling
+                charCount.className = '';
+                if (currentLength > maxLength * 0.8) {
+                    charCount.classList.add('warning');
+                }
+                if (currentLength > maxLength * 0.95) {
+                    charCount.classList.remove('warning');
+                    charCount.classList.add('danger');
+                }
+            });
+        }
+    }}
 
     setupSocket() {
         // Enhanced Socket.IO configuration with better reconnection
@@ -315,6 +350,19 @@ class LobbyManager {
         this.socket.on('game_started', (data) => {
             showNotification('Spiel startet! Weiterleitung...', 'success');
             
+            // Cleanup chat before leaving
+            if (this.chatManager) {
+                // Leave chat room on server
+                if (this.gameDbId && this.playerName) {
+                    this.socket.emit('leave_chat_room', {
+                        gameId: this.gameDbId,
+                        playerName: this.playerName
+                    });
+                }
+                this.chatManager.destroy();
+                this.chatManager = null;
+            }
+            
             // Make modal closeable again and hide it
             makeModalCloseable('raceSelectionModal');
             hideModal('raceSelectionModal');
@@ -375,6 +423,24 @@ class LobbyManager {
                 gameId: savedGameDbId,
                 playerName: savedPlayerName
             });
+            
+            // Rejoin chat room if race selection modal is open
+            const raceModal = document.getElementById('raceSelectionModal');
+            if (raceModal && raceModal.style.display === 'block') {
+                this.socket.emit('join_chat_room', {
+                    gameId: savedGameDbId,
+                    playerName: savedPlayerName
+                });
+                
+                // Reinitialize chat if needed
+                if (!this.chatManager) {
+                    this.initializeChat();
+                    if (this.chatManager) {
+                        this.chatManager.init(this.socket, savedGameDbId, savedPlayerName);
+                        this.setupChatCharacterCounter();
+                    }
+                }
+            }
         }
     }
 
@@ -644,6 +710,19 @@ class LobbyManager {
             currentGameSection.style.display = 'none';
         }
         
+        // Cleanup chat
+        if (this.chatManager) {
+            // Leave chat room on server
+            if (this.gameDbId && this.playerName) {
+                this.socket.emit('leave_chat_room', {
+                    gameId: this.gameDbId,
+                    playerName: this.playerName
+                });
+            }
+            this.chatManager.destroy();
+            this.chatManager = null;
+        }
+        
         this.currentGameId = null;
         this.isReady = false;
         this.isHost = false;
@@ -811,6 +890,25 @@ class LobbyManager {
         // Make the race selection modal persistent (cannot be closed by clicking outside or ESC)
         makeModalPersistent('raceSelectionModal');
         
+        // Initialize chat system
+        if (this.chatManager && this.gameDbId && this.playerName) {
+            const chatInitialized = this.chatManager.init(this.socket, this.gameDbId, this.playerName);
+            if (chatInitialized) {
+                console.log('Chat system initialized successfully');
+                
+                // Setup character counter for chat input
+                this.setupChatCharacterCounter();
+                
+                // Join chat room on server
+                this.socket.emit('join_chat_room', {
+                    gameId: this.gameDbId,
+                    playerName: this.playerName
+                });
+            } else {
+                console.warn('Failed to initialize chat system');
+            }
+        }
+        
         // Add debug info to modal if needed
         const modal = document.getElementById('raceSelectionModal');
         if (modal && !this.gameDbId) {
@@ -823,7 +921,7 @@ class LobbyManager {
                 Spieler: ${this.playerName || 'FEHLT'}
             `;
             const modalBody = modal.querySelector('.modal-body');
-            if (modalBody) {
+            if (modalBody && modalBody.firstChild) {
                 modalBody.insertBefore(debugInfo, modalBody.firstChild);
             }
         }
@@ -1313,6 +1411,20 @@ class LobbyManager {
         if (this.heartbeatInterval) {
             clearInterval(this.heartbeatInterval);
         }
+        
+        // Cleanup chat
+        if (this.chatManager) {
+            // Leave chat room on server
+            if (this.gameDbId && this.playerName) {
+                this.socket.emit('leave_chat_room', {
+                    gameId: this.gameDbId,
+                    playerName: this.playerName
+                });
+            }
+            this.chatManager.destroy();
+            this.chatManager = null;
+        }
+        
         if (this.socket) {
             this.socket.disconnect();
         }

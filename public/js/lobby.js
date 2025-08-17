@@ -1,18 +1,4 @@
-// Race confirmation button
-        const confirmRaceBtn = document.getElementById('confirmRaceBtn');
-        if (confirmRaceBtn) {
-            confirmRaceBtn.addEventListener('click', () => {
-                this.confirmRaceSelection();
-            });
-        }
-        
-        // Change race button
-        const changeRaceBtn = document.getElementById('changeRaceBtn');
-        if (changeRaceBtn) {
-            changeRaceBtn.addEventListener('click', () => {
-                this.changeRaceSelection();
-            });
-        }// Lobby JavaScript - Frontend logic for improved lobby
+// Lobby JavaScript - Frontend logic for improved lobby
 
 class LobbyManager {
     constructor() {
@@ -221,12 +207,12 @@ class LobbyManager {
             this.updateRaceSelectionStatus(data.confirmedCount, data.totalPlayers);
         });
 
-        this.socket.on('all_races_selected', (data) => {
+        this.socket.on('all_races_confirmed', (data) => {
             const statusEl = document.getElementById('raceSelectionStatus');
             if (statusEl) {
-                statusEl.textContent = 'Alle Rassen gewählt! Karte wird generiert...';
+                statusEl.textContent = 'Alle Rassen bestätigt! Karte wird generiert...';
             }
-            showNotification('Alle Rassen gewählt! Spiel wird vorbereitet...', 'success');
+            showNotification('Alle Rassen bestätigt! Spiel wird vorbereitet...', 'success');
         });
 
         this.socket.on('game_started', (data) => {
@@ -291,6 +277,22 @@ class LobbyManager {
         if (leaveLobbyBtn) {
             leaveLobbyBtn.addEventListener('click', () => {
                 this.leaveLobby();
+            });
+        }
+
+        // Race confirmation button
+        const confirmRaceBtn = document.getElementById('confirmRaceBtn');
+        if (confirmRaceBtn) {
+            confirmRaceBtn.addEventListener('click', () => {
+                this.confirmRaceSelection();
+            });
+        }
+        
+        // Change race button
+        const changeRaceBtn = document.getElementById('changeRaceBtn');
+        if (changeRaceBtn) {
+            changeRaceBtn.addEventListener('click', () => {
+                this.changeRaceSelection();
             });
         }
 
@@ -686,8 +688,10 @@ class LobbyManager {
             });
         });
 
-        // Initialize status
+        // Initialize status displays
         this.updateRaceSelectionStatus();
+        this.updatePlayersRaceStatus();
+        this.updateRaceSelectionButtons();
     }
 
     selectRace(raceId) {
@@ -878,54 +882,10 @@ class LobbyManager {
                 </div>
             `;
         }).join('');
-    }ification('Diese Rasse wurde bereits gewählt', 'warning');
-            return;
-        }
-
-        // Update UI to show selection (optimistic update)
-        document.querySelectorAll('.race-card').forEach(card => {
-            card.classList.remove('selected');
-        });
-        if (raceCard) {
-            raceCard.classList.add('selected');
-        }
-
-        this.selectedRaceId = raceId;
-
-        console.log('Sending race selection:', {
-            gameId: gameDbId,
-            playerName: this.playerName,
-            raceId: raceId
-        });
-
-        // Send selection to server
-        this.socket.emit('select_race', {
-            gameId: gameDbId,
-            playerName: this.playerName,
-            raceId: raceId
-        });
-
-        // Show selected race info
-        const selectedRace = this.availableRaces.find(race => race.id === raceId);
-        if (selectedRace) {
-            const selectedRaceInfo = document.getElementById('selectedRaceInfo');
-            if (selectedRaceInfo) {
-                selectedRaceInfo.innerHTML = `
-                    <h4>Gewählt: ${selectedRace.name}</h4>
-                    <p>${selectedRace.description}</p>
-                    <p style="color: ${selectedRace.color_hex}; font-weight: bold;">
-                        Deine Farbe: ${selectedRace.color_hex}
-                    </p>
-                    <small>Warte auf Serverbestätigung...</small>
-                `;
-            }
-        }
-
-        this.updateRaceSelectionStatus();
     }
 
     updateRaceSelection(raceId, playerName) {
-        // Mark race as unavailable for other players
+        // Mark race as unavailable for other players (only when confirmed)
         const raceCard = document.querySelector(`[data-race-id="${raceId}"]`);
         if (raceCard && playerName !== this.playerName) {
             raceCard.classList.add('unavailable');
@@ -972,7 +932,6 @@ class LobbyManager {
             statusEl.classList.remove('confirmed');
         }
     }
-}
 }
 
 // Initialize lobby when page loads

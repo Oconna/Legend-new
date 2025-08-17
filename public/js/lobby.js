@@ -98,12 +98,25 @@ class LobbyManager {
             this.startRaceSelection();
         });
 
-        this.socket.on('race_selected', (data) => {
-            showNotification(`${data.playerName} hat ${data.raceName} gewählt`, 'info');
-            this.updateRaceSelection(data.raceId, data.playerName);
+        this.socket.on('race_selection_confirmed', (data) => {
+            showNotification(`Rasse gewählt: ${data.raceName}`, 'success');
             
-            // Update status display
-            this.updateRaceSelectionStatus();
+            // Update UI to show confirmed selection
+            const statusEl = document.getElementById('raceSelectionStatus');
+            if (statusEl) {
+                statusEl.textContent = `✅ ${data.raceName} gewählt! Warte auf andere Spieler...`;
+                statusEl.style.background = '#2ecc71';
+            }
+        });
+
+        this.socket.on('race_selected', (data) => {
+            if (data.playerName !== this.playerName) {
+                showNotification(`${data.playerName} hat ${data.raceName} gewählt`, 'info');
+                this.updateRaceSelection(data.raceId, data.playerName);
+            }
+            
+            // Update status display with current progress
+            this.updateRaceSelectionStatus(data.racesSelected, data.totalPlayers);
         });
 
         this.socket.on('all_races_selected', (data) => {
@@ -626,14 +639,28 @@ class LobbyManager {
         }
     }
 
-    updateRaceSelectionStatus() {
+    updateRaceSelectionStatus(racesSelected = null, totalPlayers = null) {
         const statusEl = document.getElementById('raceSelectionStatus');
         if (!statusEl) return;
 
-        if (this.selectedRaceId) {
-            statusEl.textContent = 'Rasse gewählt! Warte auf andere Spieler...';
+        if (racesSelected !== null && totalPlayers !== null) {
+            // Update with server data
+            if (this.selectedRaceId) {
+                statusEl.textContent = `✅ Rasse gewählt! (${racesSelected}/${totalPlayers} Spieler fertig)`;
+                statusEl.style.background = '#2ecc71';
+            } else {
+                statusEl.textContent = `Wähle deine Rasse... (${racesSelected}/${totalPlayers} Spieler fertig)`;
+                statusEl.style.background = '#3498db';
+            }
         } else {
-            statusEl.textContent = 'Wähle deine Rasse aus...';
+            // Update with local data only
+            if (this.selectedRaceId) {
+                statusEl.textContent = 'Rasse gewählt! Warte auf andere Spieler...';
+                statusEl.style.background = '#f39c12'; // Orange for "waiting for confirmation"
+            } else {
+                statusEl.textContent = 'Wähle deine Rasse aus...';
+                statusEl.style.background = '#3498db';
+            }
         }
     }
 }

@@ -102,6 +102,53 @@ app.get('/api/races', async (req, res) => {
     }
 });
 
+app.get('/api/game/:gameId/race-selections', async (req, res) => {
+    try {
+        const gameId = parseInt(req.params.gameId);
+        const result = await gameController.getAllRaceSelections(gameId);
+        
+        if (result.success) {
+            res.json({
+                gameId: gameId,
+                selections: result.selections,
+                timestamp: new Date().toISOString()
+            });
+        } else {
+            res.status(404).json({ error: result.message });
+        }
+    } catch (error) {
+        console.error('Error in race selections API:', error);
+        res.status(500).json({ error: 'Fehler beim Abrufen der Rassenwahlen: ' + error.message });
+    }
+});
+
+app.get('/api/game/:gameId/status', async (req, res) => {
+    try {
+        const gameId = parseInt(req.params.gameId);
+        const gameState = await gameController.getGameState(gameId);
+        
+        if (gameState) {
+            res.json({
+                gameId: gameId,
+                status: gameState.game.status,
+                playerCount: gameState.players.length,
+                players: gameState.players.map(p => ({
+                    name: p.player_name,
+                    race: p.race_name,
+                    raceId: p.race_id,
+                    color: p.race_color
+                })),
+                timestamp: new Date().toISOString()
+            });
+        } else {
+            res.status(404).json({ error: 'Spiel nicht gefunden' });
+        }
+    } catch (error) {
+        console.error('Error in game status API:', error);
+        res.status(500).json({ error: 'Fehler beim Abrufen des Spielstatus: ' + error.message });
+    }
+});
+
 // Socket.IO Connection Handling
 io.on('connection', (socket) => {
     console.log(`Neuer Spieler verbunden: ${socket.id}`);
@@ -290,43 +337,96 @@ io.on('connection', (socket) => {
     // Race Selection Events (for started games in database)
     socket.on('select_race', async (data) => {
         try {
-            console.log('Race selection:', data);
+            console.log('Race selection request:', data);
+            
+            // Validate input
+            if (!data.gameId || !data.playerName || !data.raceId) {
+                socket.emit('error', 'Unvollständige Daten für Rassenwahl');
+                return;
+            }
             
             // For race selection phase, we work with database
             const result = await gameController.selectRace(data.gameId, data.playerName, data.raceId);
             
             if (result.success) {
+                console.log(`✓ Race ${result.raceName} selected by ${result.playerName} in game ${data.gameId}`);
+                
                 // Notify all players in the database game room
                 io.to(`db_game_${data.gameId}`).emit('race_selected', {
-                    playerName: data.playerName,
-                    raceId: data.raceId,
-                    raceName: result.raceName
+                    playerName: result.playerName,
+                    raceId: result.raceId,
+                    raceName: result.raceName,
+                    totalPlayers: result.totalPlayers,
+                    racesSelected: result.racesSelected
+                });
+
+                // Send confirmation to selecting player
+                socket.emit('race_selection_confirmed', {
+                    raceId: result.raceId,
+                    raceName: result.raceName,
+                    message: `Du hast ${result.raceName} gewählt!`
                 });
 
                 if (result.allRacesSelected) {
+                    console.log(`🎯 All races selected for game ${data.gameId}, starting map generation...`);
+                    
                     // All races selected, notify players
                     io.to(`db_game_${data.gameId}`).emit('all_races_selected', {
-                        message: 'Alle Rassen gewählt! Karte wird generiert...'
+                        message: 'Alle Rassen gewählt! Karte wird generiert...',
+                        totalPlayers: result.totalPlayers,
+                        racesSelected: result.racesSelected
                     });
                     
-                    // Start map generation and game
-                    const gameStartResult = await gameController.startGame(data.gameId);
-                    if (gameStartResult.success) {
-                        io.to(`db_game_${data.gameId}`).emit('game_started', {
-                            message: 'Spiel startet! Karte wird generiert...',
-                            dbGameId: data.gameId,
-                            gameData: gameStartResult.gameData
-                        });
-                    } else {
-                        io.to(`db_game_${data.gameId}`).emit('error', gameStartResult.message);
-                    }
+                    // Small delay to let players see the message
+                    setTimeout(async () => {
+                        try {
+                            // Start map generation and game
+                            const gameStartResult = await gameController.startGame(data.gameId);
+                            if (gameStartResult.success) {
+                                console.log(`🚀 Game ${data.gameId} started successfully!`);
+                                
+                                io.to(`db_game_${data.gameId}`).emit('game_started', {
+                                    message: 'Spiel startet! Weiterleitung zur Spielkarte...',
+                                    dbGameId: data.gameId,
+                                    gameData: gameStartResult.gameData
+                                });
+                            } else {
+                                console.error(`Failed to start game ${data.gameId}:`, gameStartResult.message);
+                                io.to(`db_game_${data.gameId}`).emit('error', gameStartResult.message);
+                            }
+                        } catch (startError) {
+                            console.error('Error starting game after race selection:', startError);
+                            io.to(`db_game_${data.gameId}`).emit('error', 'Fehler beim Starten des Spiels: ' + startError.message);
+                        }
+                    }, 2000); // 2 second delay
+                } else {
+                    console.log(`Waiting for more race selections in game ${data.gameId}: ${result.racesSelected}/${result.totalPlayers}`);
                 }
             } else {
+                console.log(`Race selection failed for ${data.playerName} in game ${data.gameId}:`, result.message);
                 socket.emit('error', result.message);
             }
         } catch (error) {
             console.error('Error in select_race:', error);
             socket.emit('error', 'Fehler bei der Rassenwahl: ' + error.message);
+        }
+    });
+
+    // Get current race selections for a game
+    socket.on('get_race_selections', async (data) => {
+        try {
+            const result = await gameController.getAllRaceSelections(data.gameId);
+            if (result.success) {
+                socket.emit('race_selections_list', {
+                    gameId: data.gameId,
+                    selections: result.selections
+                });
+            } else {
+                socket.emit('error', result.message);
+            }
+        } catch (error) {
+            console.error('Error getting race selections:', error);
+            socket.emit('error', 'Fehler beim Abrufen der Rassenwahlen');
         }
     });
 

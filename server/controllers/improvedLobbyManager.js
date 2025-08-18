@@ -80,155 +80,192 @@ class ImprovedLobbyManager {
     }
 
     // Join game in memory
-    joinGame(socketId, playerName, gameId) {
-        try {
-            const game = this.games.get(gameId);
-            
-            if (!game) {
-                return { success: false, message: 'Spiel nicht gefunden' };
-            }
-
-            if (game.status !== 'waiting') {
-                return { success: false, message: 'Spiel bereits gestartet' };
-            }
-
-            if (game.players.size >= game.maxPlayers) {
-                return { success: false, message: 'Spiel ist bereits voll' };
-            }
-
-            // Check if player name already exists in this game
-            for (const [socketId, player] of game.players) {
-                if (player.name === playerName.trim()) {
-                    return { success: false, message: 'Spielername bereits vergeben' };
-                }
-            }
-
-            // Add player to game
-            const playerData = {
-                socketId: socketId,
-                name: playerName.trim(),
-                isHost: false,
-                isReady: false,
-                raceId: null,
-                joinedAt: new Date()
-            };
-
-            game.players.set(socketId, playerData);
-            this.players.set(socketId, { gameId: gameId, ...playerData });
-
-            console.log(`Player ${playerName} joined game ${game.name} (ID: ${gameId})`);
-
-            return {
-                success: true,
-                gameId: gameId,
-                gameName: game.name,
-                maxPlayers: game.maxPlayers,
-                mapSize: game.mapSize,
-                isHost: false,
-                players: this.getGamePlayersArray(gameId)
-            };
-
-        } catch (error) {
-            console.error('Error joining game:', error);
-            return { success: false, message: 'Fehler beim Beitreten des Spiels' };
+joinGame(socketId, playerName, gameId) {
+    try {
+        const game = this.games.get(gameId);
+        
+        if (!game) {
+            return { success: false, message: 'Spiel nicht gefunden' };
         }
+
+        if (game.status !== 'waiting') {
+            return { success: false, message: 'Spiel bereits gestartet' };
+        }
+
+        if (game.players.size >= game.maxPlayers) {
+            return { success: false, message: 'Spiel ist bereits voll' };
+        }
+
+        // Check if player name already exists in this game
+        for (const [existingSocketId, player] of game.players) {
+            if (player.name === playerName.trim()) {
+                return { success: false, message: 'Spielername bereits vergeben' };
+            }
+        }
+
+        // Add player to game
+        const playerData = {
+            socketId: socketId,
+            name: playerName.trim(),
+            isHost: false,
+            isReady: false,
+            raceId: null,
+            joinedAt: new Date()
+        };
+
+        game.players.set(socketId, playerData);
+        this.players.set(socketId, { gameId: gameId, ...playerData });
+
+        console.log(`Player ${playerName} joined game ${game.name} (ID: ${gameId})`);
+
+        const playersArray = this.getGamePlayersArray(gameId);
+
+        return {
+            success: true,
+            gameId: gameId,
+            gameName: game.name,
+            maxPlayers: game.maxPlayers,
+            mapSize: game.mapSize,
+            isHost: false,
+            players: playersArray,
+            currentPlayers: playersArray.length // WICHTIG: Für Client
+        };
+
+    } catch (error) {
+        console.error('Error joining game:', error);
+        return { success: false, message: 'Fehler beim Beitreten des Spiels' };
     }
+}
+
+getGameInfo(gameId) {
+    try {
+        const game = this.games.get(gameId);
+        if (!game) {
+            return null;
+        }
+        
+        const playersArray = this.getGamePlayersArray(gameId);
+        
+        return {
+            gameId: gameId,
+            gameName: game.name,
+            maxPlayers: game.maxPlayers,
+            currentPlayers: playersArray.length,
+            mapSize: game.mapSize,
+            status: game.status,
+            players: playersArray
+        };
+    } catch (error) {
+        console.error('Error getting game info:', error);
+        return null;
+    }
+}
 
     // Set player ready status
-    setPlayerReady(socketId, ready) {
-        try {
-            const playerData = this.players.get(socketId);
-            if (!playerData) {
-                return { success: false, message: 'Spieler nicht gefunden' };
-            }
-
-            const game = this.games.get(playerData.gameId);
-            if (!game) {
-                return { success: false, message: 'Spiel nicht gefunden' };
-            }
-
-            // Update ready status
-            const gamePlayer = game.players.get(socketId);
-            if (gamePlayer) {
-                gamePlayer.isReady = ready;
-                playerData.isReady = ready;
-            }
-
-            // Check if all players are ready
-            const playersArray = Array.from(game.players.values());
-            const allReady = playersArray.length >= 2 && playersArray.every(p => p.isReady);
-            const readyCount = playersArray.filter(p => p.isReady).length;
-
-            console.log(`Player ${gamePlayer.name} is ${ready ? 'ready' : 'not ready'} in game ${game.name}`);
-
-            return {
-                success: true,
-                allReady: allReady,
-                readyCount: readyCount,
-                totalPlayers: playersArray.length,
-                players: this.getGamePlayersArray(playerData.gameId)
-            };
-
-        } catch (error) {
-            console.error('Error setting player ready:', error);
-            return { success: false, message: 'Fehler bei der Bereitschaftsanzeige' };
+setPlayerReady(socketId, ready) {
+    try {
+        const playerData = this.players.get(socketId);
+        if (!playerData) {
+            return { success: false, message: 'Spieler nicht gefunden' };
         }
+
+        const game = this.games.get(playerData.gameId);
+        if (!game) {
+            return { success: false, message: 'Spiel nicht gefunden' };
+        }
+
+        // Update ready status
+        const gamePlayer = game.players.get(socketId);
+        if (gamePlayer) {
+            gamePlayer.isReady = ready;
+            playerData.isReady = ready;
+        }
+
+        // Check if all players are ready
+        const playersArray = Array.from(game.players.values());
+        const allReady = playersArray.length >= 2 && playersArray.every(p => p.isReady);
+        const readyCount = playersArray.filter(p => p.isReady).length;
+        
+        // Check if game can start (all ready + host can start)
+        const canStart = allReady && playersArray.length >= 2;
+
+        console.log(`Player ${gamePlayer.name} is ${ready ? 'ready' : 'not ready'} in game ${game.name}`);
+
+        return {
+            success: true,
+            allReady: allReady,
+            canStart: canStart,
+            readyCount: readyCount,
+            totalPlayers: playersArray.length,
+            players: this.getGamePlayersArray(playerData.gameId)
+        };
+
+    } catch (error) {
+        console.error('Error setting player ready:', error);
+        return { success: false, message: 'Fehler bei der Bereitschaftsanzeige' };
     }
+}
 
     // Leave game
-    leaveGame(socketId) {
-        try {
-            const playerData = this.players.get(socketId);
-            if (!playerData) {
-                return { success: false, message: 'Spieler nicht in einem Spiel' };
-            }
+leaveGame(socketId) {
+    try {
+        const playerData = this.players.get(socketId);
+        if (!playerData) {
+            return { success: false, message: 'Spieler nicht in einem Spiel' };
+        }
 
-            const game = this.games.get(playerData.gameId);
-            if (!game) {
-                return { success: false, message: 'Spiel nicht gefunden' };
-            }
+        const game = this.games.get(playerData.gameId);
+        if (!game) {
+            return { success: false, message: 'Spiel nicht gefunden' };
+        }
 
-            const isHost = playerData.isHost;
-            const playerName = playerData.name;
-            
-            // Remove player from game
-            game.players.delete(socketId);
-            this.players.delete(socketId);
+        const isHost = playerData.isHost;
+        const playerName = playerData.name;
+        const gameId = playerData.gameId;
+        
+        // Remove player from game
+        game.players.delete(socketId);
+        this.players.delete(socketId);
 
-            console.log(`Player ${playerName} left game ${game.name}`);
+        console.log(`Player ${playerName} left game ${game.name}`);
 
-            // If no players left, delete game
-            if (game.players.size === 0) {
-                this.games.delete(playerData.gameId);
-                console.log(`Game ${game.name} deleted (no players left)`);
-                return {
-                    success: true,
-                    gameDeleted: true,
-                    message: 'Spiel verlassen und gelöscht'
-                };
-            }
-
-            // If host left, assign new host
-            if (isHost && game.players.size > 0) {
-                const newHost = Array.from(game.players.values())[0];
-                newHost.isHost = true;
-                game.hostSocketId = newHost.socketId;
-                this.players.get(newHost.socketId).isHost = true;
-                console.log(`New host assigned: ${newHost.name}`);
-            }
-
+        // If no players left, delete game
+        if (game.players.size === 0) {
+            this.games.delete(gameId);
+            console.log(`Game ${game.name} deleted (no players left)`);
             return {
                 success: true,
-                gameDeleted: false,
-                remainingPlayers: game.players.size,
-                players: this.getGamePlayersArray(playerData.gameId)
+                gameDeleted: true,
+                gameId: gameId,
+                message: 'Spiel verlassen und gelöscht'
             };
-
-        } catch (error) {
-            console.error('Error leaving game:', error);
-            return { success: false, message: 'Fehler beim Verlassen des Spiels' };
         }
+
+        // If host left, assign new host
+        if (isHost && game.players.size > 0) {
+            const newHost = Array.from(game.players.values())[0];
+            newHost.isHost = true;
+            game.hostSocketId = newHost.socketId;
+            this.players.get(newHost.socketId).isHost = true;
+            console.log(`New host assigned: ${newHost.name}`);
+        }
+
+        const playersArray = this.getGamePlayersArray(gameId);
+        
+        return {
+            success: true,
+            gameDeleted: false,
+            gameId: gameId,
+            remainingPlayers: game.players.size,
+            players: playersArray,
+            maxPlayers: game.maxPlayers // WICHTIG: MaxPlayers für Client
+        };
+
+    } catch (error) {
+        console.error('Error leaving game:', error);
+        return { success: false, message: 'Fehler beim Verlassen des Spiels' };
     }
+}
 
     // Start game - THIS is when we write to database
     async startGame(socketId, db) {
@@ -312,19 +349,41 @@ class ImprovedLobbyManager {
     }
 
     // Get players in a specific game
-    getGamePlayersArray(gameId) {
+getGamePlayersArray(gameId) {
+    const game = this.games.get(gameId);
+    if (!game) return [];
+    
+    return Array.from(game.players.values()).map(player => ({
+        socketId: player.socketId,
+        name: player.name,
+        isHost: player.isHost,
+        ready: player.isReady, // Beide Varianten für Kompatibilität
+        isReady: player.isReady,
+        raceId: player.raceId,
+        joinedAt: player.joinedAt
+    }));
+}
+
+validateGameState(gameId) {
+    try {
         const game = this.games.get(gameId);
-        if (!game) return [];
+        if (!game) return false;
         
-        return Array.from(game.players.values()).map(player => ({
-            player_name: player.name,
-            is_host: player.isHost,
-            is_ready: player.isReady,
-            race_id: player.raceId,
-            socket_id: player.socketId,
-            joined_at: player.joinedAt
-        }));
+        // Check if all players in game still exist in players map
+        for (const [socketId, gamePlayer] of game.players) {
+            const playerData = this.players.get(socketId);
+            if (!playerData || playerData.gameId !== gameId) {
+                console.warn(`Inconsistent state detected for player ${gamePlayer.name} in game ${gameId}`);
+                game.players.delete(socketId);
+            }
+        }
+        
+        return true;
+    } catch (error) {
+        console.error('Error validating game state:', error);
+        return false;
     }
+}
 
     // Get player's current game
     getPlayerGame(socketId) {

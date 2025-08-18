@@ -341,93 +341,158 @@ io.on('connection', (socket) => {
         }
     });
 
-    socket.on('join_game', (data) => {
-        try {
-            console.log('Join game request:', data);
-            const result = improvedLobbyManager.joinGame(socket.id, data.playerName, data.gameId);
+socket.on('join_game', (data) => {
+    try {
+        console.log('Join game request:', data);
+        const result = improvedLobbyManager.joinGame(socket.id, data.playerName, data.gameId);
+        
+        if (result.success) {
+            socket.join(`game_${result.gameId}`);
+            socket.emit('game_joined', result);
             
-            if (result.success) {
-                socket.join(`game_${result.gameId}`);
-                socket.emit('game_joined', result);
+            // Notify other players
+            socket.to(`game_${result.gameId}`).emit('player_joined', {
+                playerName: data.playerName
+            });
+            
+            // WICHTIG: Send updated player list to ALL players in the game room INCLUDING the joining player
+            io.to(`game_${result.gameId}`).emit('lobby_players_updated', result.players);
+            
+            // WICHTIG: Update player count in the game info section
+            io.to(`game_${result.gameId}`).emit('game_info_updated', {
+                currentPlayers: result.players.length,
+                maxPlayers: result.maxPlayers,
+                players: result.players
+            });
+            
+            // Update games list for everyone immediately
+            io.emit('games_updated', improvedLobbyManager.getAvailableGames());
+            
+            console.log(`Player ${data.playerName} joined game, broadcasting to all clients`);
+        } else {
+            socket.emit('error', result.message);
+        }
+    } catch (error) {
+        console.error('Error in join_game:', error);
+        socket.emit('error', 'Fehler beim Beitreten des Spiels: ' + error.message);
+    }
+});
+
+socket.on('player_ready', (data) => {
+    try {
+        const result = improvedLobbyManager.setPlayerReady(socket.id, data.ready);
+        
+        if (result.success) {
+            const playerData = improvedLobbyManager.players.get(socket.id);
+            
+            if (playerData) {
+                // WICHTIG: Notify ALL players in the game (including sender)
+                io.to(`game_${playerData.gameId}`).emit('player_ready_status', result);
                 
-                // Notify other players
-                socket.to(`game_${result.gameId}`).emit('player_joined', {
-                    playerName: data.playerName
+                // WICHTIG: Send updated player list to ALL players
+                io.to(`game_${playerData.gameId}`).emit('lobby_players_updated', result.players);
+                
+                // Send notification (excluding sender)
+                socket.to(`game_${playerData.gameId}`).emit('player_ready_notification', {
+                    playerName: playerData.name,
+                    ready: data.ready
+                });
+            }
+        } else {
+            socket.emit('error', result.message);
+        }
+    } catch (error) {
+        console.error('Error in player_ready:', error);
+        socket.emit('error', 'Fehler bei der Bereitschaftsanzeige');
+    }
+});
+
+socket.on('leave_game', (data) => {
+    try {
+        console.log('Leave game request:', data);
+        const playerData = improvedLobbyManager.players.get(socket.id);
+        
+        if (!playerData) {
+            socket.emit('error', 'Spieler nicht in einem Spiel');
+            return;
+        }
+        
+        const gameId = playerData.gameId;
+        const result = improvedLobbyManager.leaveGame(socket.id);
+        
+        if (result.success) {
+            socket.leave(`game_${gameId}`);
+            socket.emit('game_left', result);
+            
+            if (!result.gameDeleted) {
+                // Notify remaining players
+                socket.to(`game_${gameId}`).emit('player_left', {
+                    playerName: data.playerName || playerData.name
                 });
                 
-                // Send updated player list to game room
-                io.to(`game_${result.gameId}`).emit('lobby_players_updated', result.players);
+                // WICHTIG: Send updated player list to remaining players
+                io.to(`game_${gameId}`).emit('lobby_players_updated', result.players);
                 
-                // Update games list for everyone immediately
-                io.emit('games_updated', improvedLobbyManager.getAvailableGames());
-                
-                console.log(`Player ${data.playerName} joined game, broadcasting to all clients`);
-            } else {
-                socket.emit('error', result.message);
+                // WICHTIG: Update player count in the game info section
+                io.to(`game_${gameId}`).emit('game_info_updated', {
+                    currentPlayers: result.players.length,
+                    maxPlayers: result.maxPlayers || 8, // fallback
+                    players: result.players
+                });
             }
-        } catch (error) {
-            console.error('Error in join_game:', error);
-            socket.emit('error', 'Fehler beim Beitreten des Spiels: ' + error.message);
-        }
-    });
-
-    socket.on('player_ready', (data) => {
-        try {
-            const result = improvedLobbyManager.setPlayerReady(socket.id, data.ready);
             
-            if (result.success) {
-                const playerData = improvedLobbyManager.players.get(socket.id);
-                
-                if (playerData) {
-                    // Notify all players in the game
-                    io.to(`game_${playerData.gameId}`).emit('player_ready_status', result);
-                    
-                    // Send notification
-                    socket.to(`game_${playerData.gameId}`).emit('player_ready_notification', {
-                        playerName: playerData.name,
-                        ready: data.ready
-                    });
-                }
-            } else {
-                socket.emit('error', result.message);
-            }
-        } catch (error) {
-            console.error('Error in player_ready:', error);
-            socket.emit('error', 'Fehler bei der Bereitschaftsanzeige');
+            // Update games list for everyone
+            io.emit('games_updated', improvedLobbyManager.getAvailableGames());
+            
+        } else {
+            socket.emit('error', result.message);
         }
-    });
+    } catch (error) {
+        console.error('Error in leave_game:', error);
+        socket.emit('error', 'Fehler beim Verlassen des Spiels');
+    }
+});
 
-    socket.on('leave_game', (data) => {
-        try {
-            console.log('Leave game request:', data);
+// WICHTIG: Auch bei disconnect die Updates senden
+socket.on('disconnect', () => {
+    try {
+        console.log(`🔌 Player disconnected: ${socket.id}`);
+        
+        const playerData = improvedLobbyManager.players.get(socket.id);
+        
+        if (playerData) {
+            const gameId = playerData.gameId;
+            const playerName = playerData.name;
+            
             const result = improvedLobbyManager.leaveGame(socket.id);
             
-            if (result.success) {
-                socket.leave(`game_${result.gameId}`);
-                socket.emit('game_left', result);
+            if (result.success && !result.gameDeleted) {
+                // Notify remaining players about disconnect
+                socket.to(`game_${gameId}`).emit('player_left', {
+                    playerName: playerName
+                });
                 
-                if (!result.gameDeleted) {
-                    // Notify remaining players
-                    socket.to(`game_${result.gameId}`).emit('player_left', {
-                        playerName: data.playerName
-                    });
-                    
-                    // Send updated player list
-                    io.to(`game_${result.gameId}`).emit('lobby_players_updated', result.players);
-                }
+                // WICHTIG: Send updated player list
+                io.to(`game_${gameId}`).emit('lobby_players_updated', result.players);
                 
-                // Update games list for everyone
-                io.emit('games_updated', improvedLobbyManager.getAvailableGames());
-                
-                console.log(`Player ${data.playerName} left game, broadcasting to all clients`);
-            } else {
-                socket.emit('error', result.message);
+                // WICHTIG: Update player count
+                io.to(`game_${gameId}`).emit('game_info_updated', {
+                    currentPlayers: result.players.length,
+                    maxPlayers: result.maxPlayers || 8,
+                    players: result.players
+                });
             }
-        } catch (error) {
-            console.error('Error in leave_game:', error);
-            socket.emit('error', 'Fehler beim Verlassen des Spiels: ' + error.message);
+            
+            // Update games list
+            io.emit('games_updated', improvedLobbyManager.getAvailableGames());
+            
+            console.log(`🚪 Player ${playerName} removed from game ${gameId}`);
         }
-    });
+        
+    } catch (error) {
+        console.error('❌ Error during disconnect cleanup:', error);
+    }
+});
 
     socket.on('start_game', async (data) => {
         try {

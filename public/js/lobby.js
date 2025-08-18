@@ -97,6 +97,11 @@ class StrategyGameClient {
             console.log('Games list updated:', games);
             this.updateGamesList(games);
         });
+		
+		this.socket.on('game_info_updated', (data) => {
+    console.log('Game info updated:', data);
+    this.updateGameInfo(data);
+});
 
         this.socket.on('player_joined', (data) => {
             showNotification(`${data.playerName} ist dem Spiel beigetreten`, 'info');
@@ -116,12 +121,16 @@ class StrategyGameClient {
         });
 
         this.socket.on('lobby_players_updated', (players) => {
-            this.updateGamePlayersList(players);
-        });
+    console.log('Lobby players updated:', players);
+    this.updateGamePlayersList(players);
+    this.updatePlayerCounts(players);
+});
 
         this.socket.on('player_ready_status', (data) => {
-            this.updateReadyStatus(data);
-        });
+    console.log('Player ready status updated:', data);
+    this.updateReadyStatus(data);
+    this.updatePlayerCounts(data.players);
+});
 
         this.socket.on('player_ready_notification', (data) => {
             showNotification(`${data.playerName} ist ${data.ready ? 'bereit' : 'nicht bereit'}`, 'info');
@@ -676,44 +685,44 @@ createGameDirectly() {
         });
     }
 
-    // Game Lobby anzeigen
-    showGameLobby(data) {
-        console.log('Showing game lobby:', data);
-        
-        const gameListSection = document.getElementById('gameListSection');
-        const gameLobbySection = document.getElementById('gameLobbySection');
-        
-        if (gameListSection) gameListSection.style.display = 'none';
-        if (gameLobbySection) gameLobbySection.style.display = 'block';
-        
-        // Game info anzeigen
-        const currentGameName = document.getElementById('currentGameName');
-        const currentGamePlayerCount = document.getElementById('currentGamePlayerCount');
-        const currentGameMaxPlayers = document.getElementById('currentGameMaxPlayers');
-        const currentGameMapSize = document.getElementById('currentGameMapSize');
-        const startBtn = document.getElementById('startGameBtn');
-        
-        if (currentGameName) currentGameName.textContent = data.gameName;
-        if (currentGamePlayerCount) currentGamePlayerCount.textContent = data.players.length;
-        if (currentGameMaxPlayers) currentGameMaxPlayers.textContent = data.maxPlayers;
-        if (currentGameMapSize) currentGameMapSize.textContent = `${data.mapSize}x${data.mapSize}`;
-        
-        if (startBtn) {
-            if (this.isHost) {
-                startBtn.style.display = 'inline-block';
-                startBtn.disabled = true;
-            } else {
-                startBtn.style.display = 'none';
-            }
+// VERBESSERTE showGameLobby Methode
+showGameLobby(data) {
+    const gameListSection = document.getElementById('gameListSection');
+    const gameLobbySection = document.getElementById('gameLobbySection');
+    
+    if (gameListSection) gameListSection.style.display = 'none';
+    if (gameLobbySection) gameLobbySection.style.display = 'flex';
+    
+    // Game info anzeigen
+    const currentGameName = document.getElementById('currentGameName');
+    const currentGamePlayerCount = document.getElementById('currentGamePlayerCount');
+    const currentGameMaxPlayers = document.getElementById('currentGameMaxPlayers');
+    const currentGameMapSize = document.getElementById('currentGameMapSize');
+    const startBtn = document.getElementById('startGameBtn');
+    
+    if (currentGameName) currentGameName.textContent = data.gameName;
+    if (currentGamePlayerCount) currentGamePlayerCount.textContent = data.players ? data.players.length : 0;
+    if (currentGameMaxPlayers) currentGameMaxPlayers.textContent = data.maxPlayers;
+    if (currentGameMapSize) currentGameMapSize.textContent = `${data.mapSize}x${data.mapSize}`;
+    
+    if (startBtn) {
+        if (this.isHost) {
+            startBtn.style.display = 'inline-block';
+            startBtn.disabled = true;
+        } else {
+            startBtn.style.display = 'none';
         }
-        
-        this.updateGamePlayersList(data.players);
-        
-        // Chat für Lobby initialisieren
-        setTimeout(() => {
-            this.joinChatRoom(this.currentGameId);
-        }, 500);
     }
+    
+    // Player list und counts aktualisieren
+    this.updateGamePlayersList(data.players || []);
+    this.updatePlayerCounts(data.players || []);
+    
+    // Chat für Lobby initialisieren
+    setTimeout(() => {
+        this.joinChatRoom(this.currentGameId);
+    }, 500);
+}
 
     // Game Lobby verstecken
     hideGameLobby() {
@@ -728,29 +737,36 @@ createGameDirectly() {
         this.isReady = false;
     }
 
-    // Ready-Status aktualisieren
-    updateReadyStatus(data) {
-        console.log('Updating ready status:', data);
-        
-        const lobbyStatusText = document.getElementById('lobbyStatusText');
-        const startBtn = document.getElementById('startGameBtn');
-        
-        if (data.canStart && this.isHost) {
-            if (lobbyStatusText) lobbyStatusText.textContent = 'Alle Spieler bereit! Du kannst das Spiel starten.';
-            if (startBtn) startBtn.disabled = false;
-        } else if (data.allReady) {
-            if (lobbyStatusText) lobbyStatusText.textContent = 'Alle Spieler bereit! Warte auf Host...';
-        } else {
-            if (lobbyStatusText) lobbyStatusText.textContent = 'Warte auf andere Spieler...';
-            if (this.isHost && startBtn) {
-                startBtn.disabled = true;
-            }
-        }
-        
-        if (data.players) {
-            this.updateGamePlayersList(data.players);
+// VERBESSERTE updateReadyStatus Methode
+updateReadyStatus(data) {
+    console.log('Updating ready status:', data);
+    
+    const lobbyStatusText = document.getElementById('lobbyStatusText');
+    const startBtn = document.getElementById('startGameBtn');
+    
+    // Update ready counts
+    if (data.players) {
+        this.updatePlayerCounts(data.players);
+    }
+    
+    // Update status text and button
+    if (data.canStart && this.isHost) {
+        if (lobbyStatusText) lobbyStatusText.textContent = 'Alle Spieler bereit! Du kannst das Spiel starten.';
+        if (startBtn) startBtn.disabled = false;
+    } else if (data.allReady) {
+        if (lobbyStatusText) lobbyStatusText.textContent = 'Alle Spieler bereit! Warte auf Host...';
+    } else {
+        if (lobbyStatusText) lobbyStatusText.textContent = 'Warte auf andere Spieler...';
+        if (this.isHost && startBtn) {
+            startBtn.disabled = true;
         }
     }
+    
+    // Update player list if provided
+    if (data.players) {
+        this.updateGamePlayersList(data.players);
+    }
+}
 
     // Race Selection anzeigen
     showRaceSelection() {
@@ -840,36 +856,89 @@ games.forEach(game => {
     });
 }
 
-    // Game Players List aktualisieren
-    updateGamePlayersList(players) {
-        const playersList = document.getElementById('gameLobbyPlayersList');
-        if (!playersList) return;
-        
-        playersList.innerHTML = '';
-        
-        players.forEach(player => {
-            const playerItem = document.createElement('div');
-            playerItem.className = 'player-item';
-            
-            if (player.ready) {
-                playerItem.classList.add('ready');
-            }
-            
-            if (player.isHost) {
-                playerItem.classList.add('host');
-            }
-            
-            playerItem.innerHTML = `
-                <span class="player-name">${this.escapeHtml(player.name)}</span>
-                <span class="player-status">
-                    ${player.isHost ? '👑 ' : ''}
-                    ${player.ready ? '✅ Bereit' : '⏳ Wartet'}
-                </span>
-            `;
-            
-            playersList.appendChild(playerItem);
-        });
+// VERBESSERTE updateGamePlayersList Methode mit besserer Fehlerbehandlung
+updateGamePlayersList(players) {
+    const playersList = document.getElementById('gameLobbyPlayersList');
+    if (!playersList) {
+        console.warn('gameLobbyPlayersList element not found');
+        return;
     }
+    
+    playersList.innerHTML = '';
+    
+    if (!players || !Array.isArray(players)) {
+        console.warn('Invalid players data:', players);
+        return;
+    }
+    
+    players.forEach(player => {
+        const playerItem = document.createElement('div');
+        playerItem.className = 'player-item';
+        
+        if (player.ready || player.isReady) {
+            playerItem.classList.add('ready');
+        }
+        
+        if (player.isHost) {
+            playerItem.classList.add('host');
+        }
+        
+        playerItem.innerHTML = `
+            <span class="player-name">${this.escapeHtml(player.name)}</span>
+            <span class="player-status">
+                ${player.isHost ? '👑 ' : ''}
+                ${(player.ready || player.isReady) ? '✅ Bereit' : '⏳ Wartet'}
+            </span>
+        `;
+        
+        playersList.appendChild(playerItem);
+    });
+    
+    console.log(`Updated player list: ${players.length} players`);
+}
+
+
+// NEUE Methode: Game Info aktualisieren
+updateGameInfo(data) {
+    const currentGamePlayerCount = document.getElementById('currentGamePlayerCount');
+    const currentGameMaxPlayers = document.getElementById('currentGameMaxPlayers');
+    
+    if (currentGamePlayerCount) {
+        currentGamePlayerCount.textContent = data.currentPlayers || data.players?.length || 0;
+    }
+    
+    if (currentGameMaxPlayers && data.maxPlayers) {
+        currentGameMaxPlayers.textContent = data.maxPlayers;
+    }
+    
+    console.log(`Game info updated: ${data.currentPlayers || data.players?.length}/${data.maxPlayers} players`);
+}
+
+
+
+// NEUE Methode: Player Counts aktualisieren
+updatePlayerCounts(players) {
+    if (!players) return;
+    
+    // Update main player count display
+    const currentGamePlayerCount = document.getElementById('currentGamePlayerCount');
+    if (currentGamePlayerCount) {
+        currentGamePlayerCount.textContent = players.length;
+    }
+    
+    // Update ready status counts
+    const readyCount = players.filter(p => p.ready).length;
+    const totalPlayers = players.length;
+    
+    const readyCountElement = document.getElementById('readyCount');
+    const totalPlayersElement = document.getElementById('totalPlayers');
+    
+    if (readyCountElement) readyCountElement.textContent = readyCount;
+    if (totalPlayersElement) totalPlayersElement.textContent = totalPlayers;
+    
+    console.log(`Player counts updated: ${players.length} total, ${readyCount} ready`);
+}
+
 
     // Verfügbare Rassen anzeigen
     displayRaces() {

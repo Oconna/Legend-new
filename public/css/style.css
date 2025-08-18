@@ -177,17 +177,21 @@ input:focus, select:focus {
     box-shadow: 0 4px 6px rgba(0,0,0,0.1);
 }
 
-.lobby-sections {
-    display: grid;
+.lobby-sections,
+#gameListSection {
+    display: grid !important; /* Wichtig: Forciere Grid-Layout */
     grid-template-columns: 1fr 1fr;
     gap: 2rem;
+    width: 100%;
 }
 
-.create-game-section, .games-section {
+.create-game-section, 
+.games-section {
     background: white;
     padding: 1.5rem;
     border-radius: 12px;
     box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    min-height: 400px; /* Mindesthöhe für visuell ausgewogenes Layout */
 }
 
 .games-container {
@@ -1306,14 +1310,46 @@ input:focus, select:focus {
 }
 
 /* Current Game Lobby */
-.current-game-section {
-    grid-column: 1 / -1;
+.current-game-section,
+#gameLobbySection {
+    display: none; /* Standardmäßig versteckt */
+    grid-column: 1 / -1; /* Wenn sichtbar, nimmt die gesamte Breite ein */
     background: white;
     padding: 1.5rem;
     border-radius: 12px;
     box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     margin-bottom: 1rem;
     border: 3px solid #3498db;
+}
+
+/* Spezifische Layout-States */
+.lobby-sections.game-active {
+    grid-template-columns: 1fr; /* Einspaltiges Layout wenn Spiel aktiv */
+}
+
+.lobby-sections.game-inactive {
+    grid-template-columns: 1fr 1fr; /* Zweispaltiges Layout wenn kein Spiel aktiv */
+}
+
+/* Forciere Grid-Layout für gameListSection - Wichtigste Regel */
+#gameListSection.show-grid {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 2rem !important;
+}
+
+/* Fallback für Browser-Kompatibilität */
+@supports not (display: grid) {
+    .lobby-sections {
+        display: flex;
+        flex-direction: row;
+        gap: 2rem;
+    }
+    
+    .create-game-section,
+    .games-section {
+        flex: 1;
+    }
 }
 
 .current-game-info {
@@ -2325,4 +2361,31 @@ input:focus, select:focus {
 #lobbyChat .chat-input-container {
     display: block !important;
     visibility: visible !important;
+}
+
+/* Responsive Breakpoints - behält korrekte Layouts bei */
+@media (max-width: 1024px) {
+    .lobby-sections,
+    #gameListSection {
+        grid-template-columns: 1fr !important; /* Einspaltiges Layout auf kleinen Bildschirmen */
+        gap: 1rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .lobby-main {
+        gap: 1rem;
+    }
+    
+    .lobby-sections,
+    #gameListSection {
+        grid-template-columns: 1fr !important;
+        gap: 0.5rem;
+    }
+    
+    .create-game-section,
+    .games-section {
+        padding: 1rem;
+        min-height: 300px;
+    }
 }

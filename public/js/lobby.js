@@ -397,6 +397,86 @@ class StrategyGameClient {
         
         console.log(`${context} chat message sent successfully`);
     }
+	
+resetLobbyLayout() {
+    const gameListSection = document.getElementById('gameListSection');
+    const gameLobbySection = document.getElementById('gameLobbySection');
+    
+    console.log('🔧 Resetting lobby layout to default state...');
+    
+    // Zurück zum Standard-Layout (2-spaltiges Grid)
+    if (gameListSection) {
+        gameListSection.style.display = 'grid';
+        gameListSection.style.gridTemplateColumns = '1fr 1fr';
+        gameListSection.style.gap = '2rem';
+        gameListSection.classList.add('show-grid');
+        console.log('✅ GameListSection reset to grid layout');
+    }
+    
+    // Game Lobby verstecken
+    if (gameLobbySection) {
+        gameLobbySection.style.display = 'none';
+        console.log('✅ GameLobbySection hidden');
+    }
+    
+    // Player info section sichtbar machen (falls versteckt)
+    const playerSection = document.querySelector('.player-section');
+    if (playerSection) {
+        playerSection.style.display = 'block';
+    }
+    
+    console.log('🎯 Lobby layout successfully reset to default grid');
+}
+
+// Layout-Utility: Spiel-Lobby-Layout aktivieren
+activateGameLobbyLayout() {
+    const gameListSection = document.getElementById('gameListSection');
+    const gameLobbySection = document.getElementById('gameLobbySection');
+    
+    console.log('🔧 Activating game lobby layout...');
+    
+    // Game List verstecken
+    if (gameListSection) {
+        gameListSection.style.display = 'none';
+        gameListSection.classList.remove('show-grid');
+        console.log('✅ GameListSection hidden');
+    }
+    
+    // Game Lobby anzeigen
+    if (gameLobbySection) {
+        gameLobbySection.style.display = 'flex';
+        console.log('✅ GameLobbySection shown');
+    }
+    
+    console.log('🎯 Game lobby layout successfully activated');
+}
+
+// Layout-Utility: Layout-Status debuggen
+debugLayoutStatus() {
+    const gameListSection = document.getElementById('gameListSection');
+    const gameLobbySection = document.getElementById('gameLobbySection');
+    
+    console.log('=== LAYOUT DEBUG STATUS ===');
+    console.log('GameListSection:', {
+        display: gameListSection?.style.display || 'default',
+        gridTemplateColumns: gameListSection?.style.gridTemplateColumns || 'default',
+        classList: gameListSection?.classList.toString() || 'none',
+        visible: gameListSection?.offsetParent !== null
+    });
+    
+    console.log('GameLobbySection:', {
+        display: gameLobbySection?.style.display || 'default',
+        classList: gameLobbySection?.classList.toString() || 'none',
+        visible: gameLobbySection?.offsetParent !== null
+    });
+    
+    console.log('Current game state:', {
+        currentGameId: this.currentGameId,
+        isHost: this.isHost,
+        isReady: this.isReady
+    });
+    console.log('========================');
+}
 
     // Character Counter aktualisieren
     updateCharacterCounter(context) {
@@ -730,95 +810,87 @@ class StrategyGameClient {
     }
 
     // VERBESSERTE showGameLobby Methode
-    showGameLobby(data) {
-        const gameListSection = document.getElementById('gameListSection');
-        const gameLobbySection = document.getElementById('gameLobbySection');
-        
-        if (gameListSection) gameListSection.style.display = 'none';
-        if (gameLobbySection) gameLobbySection.style.display = 'flex';
-        
-        // Game info anzeigen
-        const currentGameName = document.getElementById('currentGameName');
-        const currentGamePlayerCount = document.getElementById('currentGamePlayerCount');
-        const currentGameMaxPlayers = document.getElementById('currentGameMaxPlayers');
-        const currentGameMapSize = document.getElementById('currentGameMapSize');
-        const startBtn = document.getElementById('startGameBtn');
-        
-        if (currentGameName) currentGameName.textContent = data.gameName;
-        if (currentGamePlayerCount) currentGamePlayerCount.textContent = data.players ? data.players.length : 0;
-        if (currentGameMaxPlayers) currentGameMaxPlayers.textContent = data.maxPlayers;
-        if (currentGameMapSize) currentGameMapSize.textContent = `${data.mapSize}x${data.mapSize}`;
-        
-        if (startBtn) {
-            if (this.isHost) {
-                startBtn.style.display = 'inline-block';
-                startBtn.disabled = true;
-            } else {
-                startBtn.style.display = 'none';
-            }
+showGameLobby(data) {
+    // Verwende die neue Utility-Funktion
+    this.activateGameLobbyLayout();
+    
+    // Game info anzeigen
+    const currentGameName = document.getElementById('currentGameName');
+    const currentGamePlayerCount = document.getElementById('currentGamePlayerCount');
+    const currentGameMaxPlayers = document.getElementById('currentGameMaxPlayers');
+    const currentGameMapSize = document.getElementById('currentGameMapSize');
+    const startBtn = document.getElementById('startGameBtn');
+    
+    if (currentGameName) currentGameName.textContent = data.gameName;
+    if (currentGamePlayerCount) currentGamePlayerCount.textContent = data.players ? data.players.length : 0;
+    if (currentGameMaxPlayers) currentGameMaxPlayers.textContent = data.maxPlayers;
+    if (currentGameMapSize) currentGameMapSize.textContent = `${data.mapSize}x${data.mapSize}`;
+    
+    if (startBtn) {
+        if (this.isHost) {
+            startBtn.style.display = 'inline-block';
+            startBtn.disabled = true;
+        } else {
+            startBtn.style.display = 'none';
         }
-        
-        // Ready-Button zurücksetzen
-        const readyBtn = document.getElementById('readyBtn');
-        if (readyBtn) {
-            this.isReady = false;
-            readyBtn.textContent = 'Bereit';
-            readyBtn.classList.remove('btn-secondary');
-            readyBtn.classList.add('btn-success');
-        }
-        
-        // Player list und counts aktualisieren
-        this.updateGamePlayersList(data.players || []);
-        this.updatePlayerCounts(data.players || []);
-        
-        // Chat für Lobby initialisieren
-        setTimeout(() => {
-            this.joinChatRoom(this.currentGameId);
-        }, 500);
-        
-        console.log('✅ Game lobby shown successfully');
     }
+    
+    // Ready-Button zurücksetzen
+    const readyBtn = document.getElementById('readyBtn');
+    if (readyBtn) {
+        this.isReady = false;
+        readyBtn.textContent = 'Bereit';
+        readyBtn.classList.remove('btn-secondary');
+        readyBtn.classList.add('btn-success');
+    }
+    
+    // Player list und counts aktualisieren
+    this.updateGamePlayersList(data.players || []);
+    this.updatePlayerCounts(data.players || []);
+    
+    // Chat für Lobby initialisieren
+    setTimeout(() => {
+        this.joinChatRoom(this.currentGameId);
+    }, 500);
+    
+    console.log('✅ Game lobby shown with proper layout management');
+}
 
     // VERBESSERTE hideGameLobby Methode mit vollständigem Cleanup
-    hideGameLobby() {
-        const gameListSection = document.getElementById('gameListSection');
-        const gameLobbySection = document.getElementById('gameLobbySection');
-        
-        if (gameListSection) gameListSection.style.display = 'block';
-        if (gameLobbySection) gameLobbySection.style.display = 'none';
-        
-        // Lokalen Zustand zurücksetzen
-        this.currentGameId = null;
-        this.isHost = false;
-        this.isReady = false;
-        
-        // Ready-Button zurücksetzen
-        const readyBtn = document.getElementById('readyBtn');
-        if (readyBtn) {
-            readyBtn.textContent = 'Bereit';
-            readyBtn.classList.remove('btn-secondary');
-            readyBtn.classList.add('btn-success');
-        }
-        
-        // Spielerliste leeren
-        const playersList = document.getElementById('gameLobbyPlayersList');
-        if (playersList) {
-            playersList.innerHTML = '';
-        }
-        
-        // Status-Texte zurücksetzen
-        const lobbyStatusText = document.getElementById('lobbyStatusText');
-        if (lobbyStatusText) {
-            lobbyStatusText.textContent = 'Warte auf andere Spieler...';
-        }
-        
-        const readyStatusText = document.getElementById('readyStatusText');
-        if (readyStatusText) {
-            readyStatusText.innerHTML = 'Bereit: <span id="readyCount">0</span>/<span id="totalPlayers">0</span>';
-        }
-        
-        console.log('✅ Game lobby hidden and reset');
+hideGameLobby() {
+    // Verwende die neue Utility-Funktion
+    this.resetLobbyLayout();
+    
+    // Lokalen Zustand zurücksetzen
+    this.currentGameId = null;
+    this.isHost = false;
+    this.isReady = false;
+    
+    // UI-Elemente zurücksetzen
+    const readyBtn = document.getElementById('readyBtn');
+    if (readyBtn) {
+        readyBtn.textContent = 'Bereit';
+        readyBtn.classList.remove('btn-secondary');
+        readyBtn.classList.add('btn-success');
     }
+    
+    const playersList = document.getElementById('gameLobbyPlayersList');
+    if (playersList) {
+        playersList.innerHTML = '';
+    }
+    
+    const lobbyStatusText = document.getElementById('lobbyStatusText');
+    if (lobbyStatusText) {
+        lobbyStatusText.textContent = 'Warte auf andere Spieler...';
+    }
+    
+    const readyStatusText = document.getElementById('readyStatusText');
+    if (readyStatusText) {
+        readyStatusText.innerHTML = 'Bereit: <span id="readyCount">0</span>/<span id="totalPlayers">0</span>';
+    }
+    
+    console.log('✅ Game lobby hidden and layout completely reset');
+}
 
     // VERBESSERTE updateReadyStatus Methode
     updateReadyStatus(data) {

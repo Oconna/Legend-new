@@ -409,7 +409,7 @@ socket.on('player_ready', (data) => {
 
 socket.on('leave_game', (data) => {
     try {
-        console.log('Leave game request:', data);
+        console.log('🚪 Leave game request:', data);
         const playerData = improvedLobbyManager.players.get(socket.id);
         
         if (!playerData) {
@@ -418,16 +418,48 @@ socket.on('leave_game', (data) => {
         }
         
         const gameId = playerData.gameId;
+        const playerName = playerData.name;
+        
+        // WICHTIG: Chat-Room verlassen BEVOR das Spiel verlassen wird
+        if (socket.playerName && socket.gameId) {
+            const chatRoom = getChatRoom(socket.gameId);
+            if (chatRoom.players.has(socket.id)) {
+                chatRoom.players.delete(socket.id);
+                
+                // Notify remaining players in chat
+                socket.to(`chat_${socket.gameId}`).emit('chat_player_left', {
+                    playerName: socket.playerName,
+                    playerCount: chatRoom.players.size
+                });
+                
+                // Update player count in chat
+                io.to(`chat_${socket.gameId}`).emit('chat_player_count', {
+                    count: chatRoom.players.size
+                });
+                
+                console.log(`🗨️ Player ${playerName} left chat for game ${gameId}`);
+            }
+        }
+        
         const result = improvedLobbyManager.leaveGame(socket.id);
         
         if (result.success) {
+            // Socket-Rooms verlassen
             socket.leave(`game_${gameId}`);
-            socket.emit('game_left', result);
+            socket.leave(`chat_${gameId}`);
             
+            // Bestätige dem Spieler das Verlassen
+            socket.emit('game_left', {
+                success: true,
+                gameId: gameId,
+                gameDeleted: result.gameDeleted,
+                message: result.gameDeleted ? 'Spiel wurde gelöscht (letzter Spieler)' : 'Du hast das Spiel verlassen'
+            });
+
             if (!result.gameDeleted) {
                 // Notify remaining players
                 socket.to(`game_${gameId}`).emit('player_left', {
-                    playerName: data.playerName || playerData.name
+                    playerName: playerName
                 });
                 
                 // WICHTIG: Send updated player list to remaining players
@@ -439,16 +471,20 @@ socket.on('leave_game', (data) => {
                     maxPlayers: result.maxPlayers || 8, // fallback
                     players: result.players
                 });
+                
+                console.log(`📊 Updated remaining ${result.players.length} players in game ${gameId}`);
             }
             
             // Update games list for everyone
             io.emit('games_updated', improvedLobbyManager.getAvailableGames());
             
+            console.log(`✅ Player ${playerName} successfully left game ${gameId}`);
+            
         } else {
             socket.emit('error', result.message);
         }
     } catch (error) {
-        console.error('Error in leave_game:', error);
+        console.error('❌ Error in leave_game:', error);
         socket.emit('error', 'Fehler beim Verlassen des Spiels');
     }
 });
@@ -456,13 +492,37 @@ socket.on('leave_game', (data) => {
 // WICHTIG: Auch bei disconnect die Updates senden
 socket.on('disconnect', () => {
     try {
-        console.log(`🔌 Player disconnected: ${socket.id}`);
+        console.log(`🔌 Socket ${socket.id} disconnected`);
         
         const playerData = improvedLobbyManager.players.get(socket.id);
         
+        // Clean up lobby manager
         if (playerData) {
             const gameId = playerData.gameId;
             const playerName = playerData.name;
+            
+            console.log(`🧹 Cleaning up disconnected player ${playerName} from game ${gameId}`);
+            
+            // Clean up chat BEFORE leaving game
+            if (socket.playerName && socket.gameId) {
+                const chatRoom = getChatRoom(socket.gameId);
+                if (chatRoom.players.has(socket.id)) {
+                    chatRoom.players.delete(socket.id);
+                    
+                    // Notify remaining players
+                    socket.to(`chat_${socket.gameId}`).emit('chat_player_left', {
+                        playerName: socket.playerName,
+                        playerCount: chatRoom.players.size
+                    });
+                    
+                    // Update player count
+                    io.to(`chat_${socket.gameId}`).emit('chat_player_count', {
+                        count: chatRoom.players.size
+                    });
+                    
+                    console.log(`🗨️ Cleaned up chat for disconnected player ${playerName}`);
+                }
+            }
             
             const result = improvedLobbyManager.leaveGame(socket.id);
             
@@ -481,13 +541,54 @@ socket.on('disconnect', () => {
                     maxPlayers: result.maxPlayers || 8,
                     players: result.players
                 });
+                
+                console.log(`📊 Updated ${result.players.length} remaining players after disconnect`);
             }
             
             // Update games list
             io.emit('games_updated', improvedLobbyManager.getAvailableGames());
             
-            console.log(`🚪 Player ${playerName} removed from game ${gameId}`);
+            console.log(`✅ Player ${playerName} cleanup completed`);
+        } else {
+            // Clean up lobby manager anyway
+            improvedLobbyManager.removePlayer(socket.id);
         }
+        
+        // Clean up database game players
+        dbGamePlayers.forEach((players, gameId) => {
+            if (players.has(socket.id)) {
+                players.delete(socket.id);
+                console.log(`🗃️ Removed ${socket.id} from DB game ${gameId}`);
+                
+                if (players.size === 0) {
+                    dbGamePlayers.delete(gameId);
+                    console.log(`🗃️ Removed empty DB game ${gameId}`);
+                }
+            }
+        });
+        
+        // Clean up chat rooms
+        if (socket.playerName && socket.gameId) {
+            const chatRoom = getChatRoom(socket.gameId);
+            if (chatRoom.players.has(socket.id)) {
+                chatRoom.players.delete(socket.id);
+                
+                // Notify remaining players
+                socket.to(`chat_${socket.gameId}`).emit('chat_player_left', {
+                    playerName: socket.playerName,
+                    playerCount: chatRoom.players.size
+                });
+                
+                // Update player count
+                io.to(`chat_${socket.gameId}`).emit('chat_player_count', {
+                    count: chatRoom.players.size
+                });
+                
+                console.log(`🧹 Final chat cleanup for disconnected player ${socket.playerName}`);
+            }
+        }
+        
+        console.log(`🔌 Disconnect cleanup completed for ${socket.id}`);
         
     } catch (error) {
         console.error('❌ Error during disconnect cleanup:', error);
@@ -649,17 +750,18 @@ socket.on('disconnect', () => {
         }
     });
 
-    socket.on('leave_chat_room', (data) => {
-        try {
-            console.log(`🚪 Player ${data.playerName} leaving chat room for game ${data.gameId}`);
-            
-            if (!data.gameId || !data.playerName) {
-                return;
-            }
-            
-            const chatRoom = getChatRoom(data.gameId);
-            
-            // Remove player from chat room tracking
+socket.on('leave_chat_room', (data) => {
+    try {
+        console.log(`🚪 Player ${data.playerName} leaving chat room for game ${data.gameId}`);
+        
+        if (!data.gameId || !data.playerName) {
+            return;
+        }
+        
+        const chatRoom = getChatRoom(data.gameId);
+        
+        // Remove player from chat room tracking
+        if (chatRoom.players.has(socket.id)) {
             chatRoom.players.delete(socket.id);
             
             // Leave socket room
@@ -676,12 +778,13 @@ socket.on('disconnect', () => {
                 count: chatRoom.players.size
             });
             
-            console.log(`✓ Player ${data.playerName} left chat for game ${data.gameId} (${chatRoom.players.size} players remaining)`);
-            
-        } catch (error) {
-            console.error('Error leaving chat room:', error);
+            console.log(`✅ Player ${data.playerName} left chat for game ${data.gameId} (${chatRoom.players.size} players remaining)`);
         }
-    });
+        
+    } catch (error) {
+        console.error('❌ Error leaving chat room:', error);
+    }
+});
 
     socket.on('get_chat_history', (data) => {
         try {

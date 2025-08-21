@@ -261,7 +261,11 @@ io.on('connection', (socket) => {
             console.log(`🔌 Socket ${socket.id} disconnected`);
             
             // Clean up lobby manager
-            improvedLobbyManager.removePlayer(socket.id);
+            const disconnectResult = improvedLobbyManager.leaveGame(socket.id);
+if (disconnectResult.success && !disconnectResult.gameDeleted) {
+    // Update remaining players if game still exists
+    io.emit('games_updated', improvedLobbyManager.getAvailableGames());
+}
             
             // Clean up database game players
             dbGamePlayers.forEach((players, gameId) => {
@@ -524,6 +528,7 @@ socket.on('disconnect', () => {
                 }
             }
             
+            // ✅ KORRIGIERT: Verwende leaveGame statt removePlayer
             const result = improvedLobbyManager.leaveGame(socket.id);
             
             if (result.success && !result.gameDeleted) {
@@ -549,10 +554,9 @@ socket.on('disconnect', () => {
             io.emit('games_updated', improvedLobbyManager.getAvailableGames());
             
             console.log(`✅ Player ${playerName} cleanup completed`);
-        } else {
-            // Clean up lobby manager anyway
-            improvedLobbyManager.removePlayer(socket.id);
         }
+        // ❌ ENTFERNT: Diese Zeile war der Fehler
+        // improvedLobbyManager.removePlayer(socket.id);
         
         // Clean up database game players
         dbGamePlayers.forEach((players, gameId) => {

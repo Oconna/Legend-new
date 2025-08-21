@@ -2389,3 +2389,121 @@ input:focus, select:focus {
         min-height: 300px;
     }
 }
+
+/* Standard-Zustand: Beide Bereiche sichtbar im Grid-Layout */
+.lobby-sections {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+    transition: all 0.3s ease;
+}
+
+/* Wenn Spiel aktiv ist: Game-List-Section verstecken */
+.lobby-sections.game-active {
+    display: none !important;
+}
+
+/* Game Lobby Section - standardmäßig versteckt */
+.current-game-section {
+    display: none;
+    background: white;
+    padding: 1.5rem;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    margin-bottom: 1rem;
+    border: 3px solid #3498db;
+    animation: slideInFromBottom 0.4s ease-out;
+}
+
+/* Wenn Game Lobby sichtbar ist */
+.current-game-section.active {
+    display: block !important;
+}
+
+/* Smooth Animations */
+@keyframes slideInFromBottom {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes slideOutToBottom {
+    from {
+        opacity: 1;
+        transform: translateY(0);
+    }
+    to {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+}
+
+.lobby-sections.hiding {
+    animation: slideOutToBottom 0.3s ease-in;
+}
+
+.lobby-sections.showing {
+    animation: slideInFromBottom 0.3s ease-out;
+}
+
+/* Layout States für bessere Kontrolle */
+.layout-state-default .lobby-sections {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr;
+}
+
+.layout-state-default .current-game-section {
+    display: none !important;
+}
+
+.layout-state-game-lobby .lobby-sections {
+    display: none !important;
+}
+
+.layout-state-game-lobby .current-game-section {
+    display: block !important;
+}
+
+/* Visual States für UI-Feedback */
+.ui-state-loading {
+    opacity: 0.7;
+    pointer-events: none;
+}
+
+.ui-state-loading::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255, 255, 255, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: inherit;
+}
+
+/* Responsive Anpassungen */
+@media (max-width: 1024px) {
+    .lobby-sections {
+        grid-template-columns: 1fr !important;
+        gap: 1rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .lobby-sections {
+        gap: 0.5rem;
+    }
+    
+    .current-game-section {
+        padding: 1rem;
+        margin-bottom: 0.5rem;
+    }
+}

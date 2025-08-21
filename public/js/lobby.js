@@ -21,13 +21,14 @@ class StrategyGameClient {
         this.init();
     }
 
-    init() {
-        this.initializeSocket();
-        this.setupEventListeners();
-        this.loadAvailableGames();
-        this.initializeChat();
-        console.log('Strategy game client initialized');
-    }
+init() {
+    this.initializeSocket();
+    this.setupEventListeners();
+    this.setupLayoutEventListeners(); // NEUE Zeile
+    this.loadAvailableGames();
+    this.initializeChat();
+    console.log('Strategy game client initialized with layout manager');
+}
 
     // Socket-Verbindung initialisieren
     initializeSocket() {
@@ -811,8 +812,15 @@ debugLayoutStatus() {
 
     // VERBESSERTE showGameLobby Methode
 showGameLobby(data) {
-    // Verwende die neue Utility-Funktion
-    this.activateGameLobbyLayout();
+    console.log('🏠 Showing game lobby with layout manager');
+    
+    // Layout Manager verwenden
+    if (window.layoutManager) {
+        window.layoutManager.showGameLobbyLayout();
+    } else {
+        // Fallback ohne Layout Manager
+        this.activateGameLobbyLayoutFallback();
+    }
     
     // Game info anzeigen
     const currentGameName = document.getElementById('currentGameName');
@@ -853,13 +861,20 @@ showGameLobby(data) {
         this.joinChatRoom(this.currentGameId);
     }, 500);
     
-    console.log('✅ Game lobby shown with proper layout management');
+    console.log('✅ Game lobby shown with layout manager');
 }
 
     // VERBESSERTE hideGameLobby Methode mit vollständigem Cleanup
 hideGameLobby() {
-    // Verwende die neue Utility-Funktion
-    this.resetLobbyLayout();
+    console.log('🏠 Hiding game lobby with layout manager');
+    
+    // Layout Manager verwenden
+    if (window.layoutManager) {
+        window.layoutManager.showDefaultLayout();
+    } else {
+        // Fallback ohne Layout Manager
+        this.resetLobbyLayoutFallback();
+    }
     
     // Lokalen Zustand zurücksetzen
     this.currentGameId = null;
@@ -889,7 +904,106 @@ hideGameLobby() {
         readyStatusText.innerHTML = 'Bereit: <span id="readyCount">0</span>/<span id="totalPlayers">0</span>';
     }
     
-    console.log('✅ Game lobby hidden and layout completely reset');
+    console.log('✅ Game lobby hidden and layout reset');
+}
+
+// Fallback-Methoden für den Fall, dass Layout Manager nicht verfügbar ist
+activateGameLobbyLayoutFallback() {
+    console.log('🔧 Using fallback layout activation');
+    
+    const gameListSection = document.getElementById('gameListSection');
+    const gameLobbySection = document.getElementById('gameLobbySection');
+    
+    if (gameListSection) {
+        gameListSection.style.display = 'none';
+    }
+    
+    if (gameLobbySection) {
+        gameLobbySection.style.display = 'block';
+    }
+}
+
+resetLobbyLayoutFallback() {
+    console.log('🔧 Using fallback layout reset');
+    
+    const gameListSection = document.getElementById('gameListSection');
+    const gameLobbySection = document.getElementById('gameLobbySection');
+    
+    if (gameListSection) {
+        gameListSection.style.display = 'grid';
+        gameListSection.style.gridTemplateColumns = '1fr 1fr';
+        gameListSection.style.gap = '2rem';
+    }
+    
+    if (gameLobbySection) {
+        gameLobbySection.style.display = 'none';
+    }
+}
+
+// NEUE Methode: Layout testen
+testLayoutTransitions() {
+    console.log('🧪 Testing layout transitions...');
+    
+    if (window.layoutManager) {
+        // Test 1: Zu Game Lobby wechseln
+        setTimeout(() => {
+            console.log('Test 1: Switching to game lobby');
+            window.layoutManager.showGameLobbyLayout();
+        }, 1000);
+        
+        // Test 2: Zurück zu Default
+        setTimeout(() => {
+            console.log('Test 2: Switching back to default');
+            window.layoutManager.showDefaultLayout();
+        }, 3000);
+        
+        // Test 3: Sofortige Änderung
+        setTimeout(() => {
+            console.log('Test 3: Immediate change to game lobby');
+            window.layoutManager.setLayoutImmediate('game-lobby');
+        }, 5000);
+        
+        // Test 4: Reset
+        setTimeout(() => {
+            console.log('Test 4: Reset');
+            window.layoutManager.reset();
+        }, 7000);
+    } else {
+        console.log('❌ Layout Manager not available for testing');
+    }
+}
+
+// Event-Listener für Layout-Änderungen hinzufügen
+setupLayoutEventListeners() {
+    window.addEventListener('layoutChanged', (event) => {
+        console.log('📐 Layout changed detected:', event.detail);
+        
+        // Hier können zusätzliche Aktionen ausgeführt werden
+        // wenn sich das Layout ändert
+        
+        if (event.detail.layout === 'game-lobby') {
+            // Game lobby ist jetzt aktiv
+            this.onGameLobbyActivated();
+        } else if (event.detail.layout === 'default') {
+            // Default layout ist jetzt aktiv
+            this.onDefaultLayoutActivated();
+        }
+    });
+}
+
+// Callback-Methoden für Layout-Änderungen
+onGameLobbyActivated() {
+    console.log('🎮 Game lobby layout activated');
+    // Hier können spezifische Aktionen für die Game Lobby ausgeführt werden
+}
+
+onDefaultLayoutActivated() {
+    console.log('🏠 Default layout activated');
+    // Hier können spezifische Aktionen für das Default Layout ausgeführt werden
+    // z.B. Spiele-Liste neu laden
+    setTimeout(() => {
+        this.loadAvailableGames();
+    }, 300);
 }
 
     // VERBESSERTE updateReadyStatus Methode
@@ -1304,4 +1418,29 @@ function showNotification(message, type = 'info') {
             }
         }, 300);
     }, 5000);
+}
+
+// Globale Funktionen für den Layout Manager
+function showGameLobby() {
+    if (window.layoutManager) {
+        window.layoutManager.showGameLobbyLayout();
+    }
+}
+
+function showDefaultLayout() {
+    if (window.layoutManager) {
+        window.layoutManager.showDefaultLayout();
+    }
+}
+
+function debugLayout() {
+    if (window.layoutManager) {
+        console.log(window.layoutManager.getDebugInfo());
+    }
+}
+
+function resetLayout() {
+    if (window.layoutManager) {
+        window.layoutManager.reset();
+    }
 }

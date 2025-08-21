@@ -276,9 +276,113 @@
     </div>
 
     <!-- Scripts -->
-    <script src="/socket.io/socket.io.js"></script>
-    <script src="js/utils.js"></script>
-    <script src="js/chat.js"></script>
-    <script src="js/lobby.js"></script>
+<script src="/socket.io/socket.io.js"></script>
+<script src="js/utils.js"></script>
+<script src="js/chat.js"></script>
+<script src="js/lobby_layout_manager.js"></script> <!-- NEUE Zeile -->
+<script src="js/lobby.js"></script>
+
+<style>
+/* Erweiterte Layout-Regeln direkt im HTML */
+.lobby-main {
+    transition: all 0.3s ease;
+}
+
+.lobby-sections {
+    transition: all 0.3s ease;
+}
+
+.current-game-section {
+    transition: all 0.3s ease;
+}
+
+/* Loading-Overlay für sanfte Übergänge */
+.layout-loading {
+    position: relative;
+    pointer-events: none;
+}
+
+.layout-loading::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255, 255, 255, 0.7);
+    border-radius: inherit;
+    z-index: 10;
+}
+
+/* Debug-Styles (nur während Entwicklung) */
+.debug-layout .lobby-sections {
+    border: 2px solid blue !important;
+}
+
+.debug-layout .current-game-section {
+    border: 2px solid red !important;
+}
+
+.debug-layout .current-game-section.active {
+    border: 2px solid green !important;
+}
+</style>
+
+<!-- Debug-Konsole für Layout (optional, nur während Entwicklung) -->
+<div id="layoutDebug" style="position: fixed; top: 10px; right: 10px; background: rgba(0,0,0,0.8); color: white; padding: 10px; border-radius: 5px; font-family: monospace; font-size: 12px; z-index: 9999; display: none;">
+    <div>Layout: <span id="currentLayoutState">-</span></div>
+    <div>Game ID: <span id="currentGameIdDebug">-</span></div>
+    <button onclick="window.layoutManager?.reset()" style="margin-top: 5px; padding: 2px 8px; font-size: 10px;">Reset</button>
+    <button onclick="document.getElementById('layoutDebug').style.display='none'" style="margin-top: 5px; padding: 2px 8px; font-size: 10px;">Hide</button>
+</div>
+
+<!-- Debug-Script für Entwicklung -->
+<script>
+// Layout Debug Panel (nur während Entwicklung aktiv)
+if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    // Debug Panel anzeigen
+    document.addEventListener('DOMContentLoaded', () => {
+        const debugPanel = document.getElementById('layoutDebug');
+        if (debugPanel) {
+            // debugPanel.style.display = 'block'; // Auskommentiert - bei Bedarf aktivieren
+        }
+    });
+    
+    // Layout-Status live aktualisieren
+    window.addEventListener('layoutChanged', (event) => {
+        const layoutState = document.getElementById('currentLayoutState');
+        if (layoutState) {
+            layoutState.textContent = event.detail.layout;
+        }
+    });
+    
+    // Game ID live aktualisieren  
+    setInterval(() => {
+        const gameIdDebug = document.getElementById('currentGameIdDebug');
+        if (gameIdDebug && window.gameClient) {
+            gameIdDebug.textContent = window.gameClient.currentGameId || 'none';
+        }
+    }, 1000);
+    
+    // Tastenkürzel für Layout-Debug
+    document.addEventListener('keydown', (e) => {
+        // Ctrl + Shift + L = Layout Debug Panel togglen
+        if (e.ctrlKey && e.shiftKey && e.key === 'L') {
+            const debugPanel = document.getElementById('layoutDebug');
+            if (debugPanel) {
+                debugPanel.style.display = debugPanel.style.display === 'none' ? 'block' : 'none';
+            }
+        }
+        
+        // Ctrl + Shift + R = Layout Reset
+        if (e.ctrlKey && e.shiftKey && e.key === 'R') {
+            if (window.layoutManager) {
+                window.layoutManager.reset();
+                console.log('🔄 Layout reset via keyboard shortcut');
+            }
+        }
+    });
+}
+</script>
 </body>
 </html>

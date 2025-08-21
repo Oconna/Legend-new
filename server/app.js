@@ -255,56 +255,6 @@ app.get('/api/chat/stats', (req, res) => {
 io.on('connection', (socket) => {
     console.log(`User connected: ${socket.id}`);
 
-    // Basic connection events
-    socket.on('disconnect', () => {
-        try {
-            console.log(`🔌 Socket ${socket.id} disconnected`);
-            
-            // Clean up lobby manager
-            const disconnectResult = improvedLobbyManager.leaveGame(socket.id);
-if (disconnectResult.success && !disconnectResult.gameDeleted) {
-    // Update remaining players if game still exists
-    io.emit('games_updated', improvedLobbyManager.getAvailableGames());
-}
-            
-            // Clean up database game players
-            dbGamePlayers.forEach((players, gameId) => {
-                if (players.has(socket.id)) {
-                    players.delete(socket.id);
-                    console.log(`Removed ${socket.id} from DB game ${gameId}`);
-                    
-                    if (players.size === 0) {
-                        dbGamePlayers.delete(gameId);
-                        console.log(`Removed empty DB game ${gameId}`);
-                    }
-                }
-            });
-            
-            // Clean up chat rooms
-            if (socket.playerName && socket.gameId) {
-                const chatRoom = getChatRoom(socket.gameId);
-                if (chatRoom.players.has(socket.id)) {
-                    chatRoom.players.delete(socket.id);
-                    
-                    // Notify remaining players
-                    socket.to(`chat_${socket.gameId}`).emit('chat_player_left', {
-                        playerName: socket.playerName,
-                        playerCount: chatRoom.players.size
-                    });
-                    
-                    // Update player count
-                    io.to(`chat_${socket.gameId}`).emit('chat_player_count', {
-                        count: chatRoom.players.size
-                    });
-                    
-                    console.log(`🧹 Cleaned up chat for disconnected player ${socket.playerName} from game ${socket.gameId}`);
-                }
-            }
-            
-        } catch (error) {
-            console.error('❌ Error during disconnect cleanup:', error);
-        }
-    });
 
     // Heartbeat/Ping
     socket.on('ping', () => {

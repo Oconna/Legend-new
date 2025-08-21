@@ -152,7 +152,7 @@ function setupGameLobbyEvents(socket) {
     socket.on('player_ready', (data) => {
         try {
             console.log('Player ready:', data);
-            const result = improvedLobbyManager.togglePlayerReady(data.gameId, data.playerName);
+            const result = improvedLobbyManager.setPlayerReady(data.gameId, data.playerName);
             
             if (result.success) {
                 // Notify all players in the game

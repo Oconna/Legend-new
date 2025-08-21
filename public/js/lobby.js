@@ -3,8 +3,7 @@
 class StrategyGameClient {
     constructor() {
         this.socket = null;
-        this.currentGameId = null; // Memory ID
-        this.gameDbId = null; // NEUE: Database ID				  
+        this.currentGameId = null;
         this.gameState = null;
         this.playerName = '';
         this.availableRaces = [];
@@ -25,13 +24,10 @@ class StrategyGameClient {
 init() {
     this.initializeSocket();
     this.setupEventListeners();
-    this.setupLayoutEventListeners();
+    this.setupLayoutEventListeners(); // NEUE Zeile
     this.loadAvailableGames();
     this.initializeChat();
-    
-    window.gameClient = this;  // ← DIESE ZEILE HINZUFÜGEN
-    
-    console.log('Strategy game client initialized with improved ID handling');
+    console.log('Strategy game client initialized with layout manager');
 }
 
     // Socket-Verbindung initialisieren
@@ -88,7 +84,6 @@ init() {
             showNotification('Spiel erfolgreich erstellt!', 'success');
             this.isHost = data.isHost;
             this.currentGameId = data.gameId;
-            this.gameDbId = data.gameDbId; // NEUE: Speichere DB-ID
             this.showGameLobby(data);
         });
 
@@ -96,7 +91,6 @@ init() {
             showNotification('Spiel erfolgreich beigetreten!', 'success');
             this.isHost = data.isHost;
             this.currentGameId = data.gameId;
-            this.gameDbId = data.gameDbId; // NEUE: Speichere DB-ID
             this.showGameLobby(data);
         });
 
@@ -150,39 +144,15 @@ init() {
             this.showRaceSelection();
         });
 
-        this.socket.on('race-selection-joined', (data) => {
-            console.log('Race selection joined:', data);
-            this.gameDbId = data.gameDbId;
-        });
-
-        this.socket.on('available-races', (races) => {
-            console.log('Available races received:', races);
-            this.availableRaces = races;
-            this.displayRaces();
-        });
-
-        this.socket.on('race-selected', (data) => {
-            console.log('Race selected:', data);
-            showNotification(`Rasse ${data.raceName} ausgewählt`, 'success');
-            this.selectedRace = data.raceId;
-            this.updateRaceSelectionUI();
-        });
-
-        this.socket.on('race-confirmed', (data) => {
-            console.log('Race confirmed:', data);
-            showNotification(`Rasse ${data.raceName} bestätigt!`, 'success');
-            this.updateRaceSelectionUI();
-        });
-
-        this.socket.on('race-selection-update', (data) => {
+        this.socket.on('race_selection_update', (data) => {
             console.log('Race selection update:', data);
             this.updateRaceSelectionDisplay(data);
         });
 
-        this.socket.on('all-races-confirmed', (data) => {
-            console.log('All races confirmed:', data);
-            showNotification(data.message, 'success');
-            // TODO: Weiterleitung zur Karte
+        this.socket.on('available_races', (races) => {
+            console.log('Available races received:', races);
+            this.availableRaces = races;
+            this.displayRaces();
         });
     }
 
@@ -742,43 +712,63 @@ debugLayoutStatus() {
     }
 
     // VERBESSERTE leaveCurrentGame Methode mit vollständigem Cleanup
-async leaveCurrentGame() {
-    if (!this.currentGameId) {
-        console.warn('No current game to leave');
-        showNotification('Du bist in keinem Spiel', 'warning');
-        return;
-    }
+    leaveCurrentGame() {
+        if (!this.currentGameId) {
+            console.warn('No current game to leave');
+            showNotification('Du bist in keinem Spiel', 'warning');
+            return;
+        }
 
-    console.log('🚪 Leaving current game:', this.currentGameId);
-    
-    if (!confirm('Möchtest du das Spiel wirklich verlassen?')) {
-        return;
-    }
+        console.log('🚪 Leaving current game:', this.currentGameId);
+        
+        // Bestätigungsdialog (optional)
+        if (!confirm('Möchtest du das Spiel wirklich verlassen?')) {
+            return;
+        }
 
-    try {
-        const gameId = this.currentGameId;
-        const gameDbId = this.gameDbId;  // ← DIESE ZEILE HINZUFÜGEN
-        
-        this.socket.emit('leave_game', {
-            gameId: gameId,
-            gameDbId: gameDbId  // ← DIESE ZEILE HINZUFÜGEN
-        });
-        
-        this.resetGameState();  // ← DIESE ZEILE HINZUFÜGEN (statt einzelne null-Zuweisungen)
-        this.hideGameLobby();
-        this.hideRaceSelection();
-        
-        showNotification('Spiel verlassen...', 'info');
-        
-        setTimeout(() => {
-            this.loadAvailableGames();
-        }, 500);
-        
-    } catch (error) {
-        console.error('Error leaving game:', error);
-        showNotification('Fehler beim Verlassen des Spiels', 'error');
+        try {
+            // Chat-Room verlassen
+            if (this.currentGameId) {
+                this.leaveChatRoom(this.currentGameId);
+                console.log('✅ Left chat room');
+            }
+            
+            // Socket-Event senden
+            this.socket.emit('leave_game', {
+                gameId: this.currentGameId,
+                playerName: this.playerName
+            });
+            console.log('✅ Sent leave_game event');
+
+            // Lokalen Zustand zurücksetzen
+            const previousGameId = this.currentGameId;
+            this.currentGameId = null;
+            this.gameDbId = null;
+            this.selectedRace = null;
+            this.isHost = false;
+            this.isReady = false;
+            console.log(`✅ Reset local state for game ${previousGameId}`);
+            
+            // UI zurücksetzen
+            this.hideGameLobby();
+            this.hideRaceSelection();
+            
+            // Chat-Nachrichten leeren
+            this.clearChatMessages();
+            
+            // Spiele-Liste neu laden
+            setTimeout(() => {
+                this.loadAvailableGames();
+            }, 500);
+            
+            console.log('✅ Successfully left game and reset UI');
+            showNotification('Du hast das Spiel verlassen', 'info');
+            
+        } catch (error) {
+            console.error('❌ Error leaving game:', error);
+            showNotification('Fehler beim Verlassen des Spiels', 'error');
+        }
     }
-}
 
     // Ready-Status umschalten
     toggleReady() {
@@ -809,26 +799,16 @@ async leaveCurrentGame() {
     }
 
     // Spiel starten
-startGame() {
-    if (!this.isHost) {
-        showNotification('Nur der Host kann das Spiel starten', 'error');
-        return;
-    }
+    startGame() {
+        if (!this.currentGameId || !this.isHost) return;
 
-    if (!this.currentGameId) {
-        showNotification('Kein aktives Spiel gefunden', 'error');
-        return;
-    }
+        console.log('Starting game:', this.currentGameId);
 
-    console.log(`Starting game ${this.currentGameId} (DB: ${this.gameDbId})`);
-    
-    this.socket.emit('start_game', {
-        gameId: this.currentGameId,
-        gameDbId: this.gameDbId  // ← DIESE ZEILE HINZUFÜGEN
-    });
-    
-    showNotification('Spiel wird gestartet...', 'info');
-}
+        this.socket.emit('start_game', {
+            gameId: this.currentGameId,
+            playerName: this.playerName
+        });
+    }
 
     // VERBESSERTE showGameLobby Methode
 showGameLobby(data) {
@@ -1058,34 +1038,25 @@ onDefaultLayoutActivated() {
     }
 
     // Race Selection anzeigen
-showRaceSelection() {
-    const modal = document.getElementById('raceSelectionModal');
-    if (!modal) return;
+    showRaceSelection() {
+        const modal = document.getElementById('raceSelectionModal');
+        if (!modal) return;
 
-    modal.style.display = 'block';
-    this.currentChatContext = 'race_selection';
-    
-    this.transferChatMessages();
-    
-    setTimeout(() => {
-        this.setupRaceSelectionChatListeners();
-    }, 100);
-    
-    // KORRIGIERT: Verwende DB-ID für Race Selection
-    console.log(`Joining race selection with DB ID: ${this.gameDbId}`);
-    
-    this.socket.emit('join-race-selection', {
-        gameId: this.currentGameId,
-        gameDbId: this.gameDbId,
-        playerName: this.playerName
-    });
-    
-    this.socket.emit('get-available-races', {
-        gameId: this.gameDbId || this.currentGameId
-    });
-    
-    console.log('Race selection modal shown');
-}
+        modal.style.display = 'block';
+        this.currentChatContext = 'race_selection';
+        
+        this.transferChatMessages();
+        
+        setTimeout(() => {
+            this.setupRaceSelectionChatListeners();
+        }, 100);
+        
+        this.socket.emit('get_available_races', {
+            gameId: this.gameDbId
+        });
+        
+        console.log('Race selection modal shown');
+    }
 
     // Race Selection verstecken
     hideRaceSelection() {
@@ -1413,91 +1384,6 @@ showRaceSelection() {
         } else {
             console.log('🧪 Cannot test: missing gameId or playerName');
         }
-    }
-	
-	selectRace(raceId) {
-        if (!raceId) {
-            showNotification('Bitte wähle eine Rasse aus', 'error');
-            return;
-        }
-
-        console.log(`Selecting race ${raceId} for game ${this.gameDbId || this.currentGameId}`);
-        
-        this.socket.emit('select-race', {
-            gameId: this.gameDbId || this.currentGameId,
-            raceId: raceId
-        });
-    }
-
-    confirmRaceSelection() {
-        if (!this.selectedRace) {
-            showNotification('Bitte wähle zuerst eine Rasse aus', 'error');
-            return;
-        }
-
-        console.log(`Confirming race ${this.selectedRace} for game ${this.gameDbId || this.currentGameId}`);
-        
-        this.socket.emit('confirm-race', {
-            gameId: this.gameDbId || this.currentGameId,
-            raceId: this.selectedRace
-        });
-    }
-
-    updateRaceSelectionUI() {
-        // Update UI elements to reflect current race selection
-        const raceCards = document.querySelectorAll('.race-card');
-        raceCards.forEach(card => {
-            card.classList.remove('selected', 'confirmed');
-            if (card.dataset.raceId == this.selectedRace) {
-                card.classList.add('selected');
-            }
-        });
-    }
-
-    updateRaceSelectionDisplay(data) {
-        // Update display with other players' selections
-        console.log('Updating race selection display:', data);
-        // Implementation depends on your UI structure
-    }
-
-    // Error Handling
-    handleSocketError(error) {
-        console.error('Socket Error:', error);
-        
-        if (error.includes('Spiel nicht gefunden')) {
-            showNotification('Spiel nicht gefunden. Lade verfügbare Spiele neu...', 'warning');
-            this.resetGameState();
-            this.hideGameLobby();
-            this.hideRaceSelection();
-            setTimeout(() => {
-                this.loadAvailableGames();
-            }, 1000);
-        } else {
-            showNotification('Fehler: ' + error, 'error');
-        }
-    }
-
-    resetGameState() {
-        this.currentGameId = null;
-        this.gameDbId = null;
-        this.gameState = null;
-        this.isHost = false;
-        this.isReady = false;
-        this.selectedRace = null;
-        this.availableRaces = [];
-        this.currentPlayers = [];
-        
-        console.log('🔄 Game state reset');
-    }
-
-    // Debug Helper
-    debugGameIds() {
-        console.log('🔍 Current Game IDs:', {
-            memoryId: this.currentGameId,
-            dbId: this.gameDbId,
-            playerName: this.playerName,
-            isHost: this.isHost
-        });
     }
 }
 

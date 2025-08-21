@@ -584,32 +584,6 @@ class GameController {
             return { success: false, message: 'Fehler beim Abrufen der Spielstatistiken' };
         }
     }
-	
-	async startRaceSelection(gameId, hostPlayerName) {
-    try {
-        // Prüfe ob das Spiel im richtigen Status ist
-        const game = await db.query(
-            'SELECT * FROM games WHERE id = ? AND status = "waiting"',
-            [gameId]
-        );
-
-        if (game.length === 0) {
-            return { success: false, message: 'Spiel nicht gefunden oder bereits gestartet' };
-        }
-
-        // Ändere Status zu race_selection
-        await db.query(
-            'UPDATE games SET status = "race_selection" WHERE id = ?',
-            [gameId]
-        );
-
-        return { success: true };
-
-    } catch (error) {
-        console.error('Error starting race selection:', error);
-        return { success: false, message: 'Fehler beim Starten der Rassenauswahl' };
-    }
-}
 }
 
 module.exports = new GameController();

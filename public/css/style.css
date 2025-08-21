@@ -2507,3 +2507,315 @@ input:focus, select:focus {
         margin-bottom: 0.5rem;
     }
 }
+
+/* Verbesserte CSS-Regeln für stabile Layout-Transitions */
+
+/* Basis Layout-Container */
+.lobby-main {
+    padding: 2rem;
+    max-width: 1400px;
+    margin: 0 auto;
+    min-height: 100vh;
+}
+
+/* Game List Section - Standardmäßig sichtbar im Grid-Layout */
+#gameListSection {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+    transition: opacity 0.4s ease-in-out, visibility 0.4s ease-in-out;
+    opacity: 1;
+    visibility: visible;
+}
+
+/* Force Grid-Layout für gameListSection */
+#gameListSection.show-grid {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 2rem !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+}
+
+/* Game Lobby Section - standardmäßig versteckt */
+#gameLobbySection {
+    display: none !important;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.4s ease-in-out, visibility 0.4s ease-in-out;
+    background: white;
+    padding: 1.5rem;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    margin-bottom: 1rem;
+    border: 3px solid #3498db;
+}
+
+/* Wenn Game Lobby aktiv ist */
+#gameLobbySection.active {
+    display: block !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+}
+
+/* Layout States für bessere Kontrolle */
+.layout-state-default #gameListSection {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 2rem !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+}
+
+.layout-state-default #gameLobbySection {
+    display: none !important;
+    opacity: 0 !important;
+    visibility: hidden !important;
+}
+
+.layout-state-game-lobby #gameListSection {
+    display: none !important;
+    opacity: 0 !important;
+    visibility: hidden !important;
+}
+
+.layout-state-game-lobby #gameLobbySection {
+    display: block !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+}
+
+/* Transition States für animierte Übergänge */
+.layout-transitioning #gameListSection,
+.layout-transitioning #gameLobbySection {
+    pointer-events: none; /* Verhindert Interaktion während Transition */
+}
+
+/* Fallback für ältere Browser ohne CSS-Grid */
+@supports not (display: grid) {
+    #gameListSection {
+        display: flex !important;
+        flex-wrap: wrap;
+        gap: 2rem;
+    }
+    
+    #gameListSection > * {
+        flex: 1 1 45%;
+        min-width: 300px;
+    }
+}
+
+/* Smooth Animations für bessere UX */
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes fadeOutDown {
+    from {
+        opacity: 1;
+        transform: translateY(0);
+    }
+    to {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+}
+
+/* Animation-Klassen für manuelle Trigger */
+.fade-in-up {
+    animation: fadeInUp 0.4s ease-out forwards;
+}
+
+.fade-out-down {
+    animation: fadeOutDown 0.3s ease-in forwards;
+}
+
+/* Spezielle Regeln für verschiedene Sektionen */
+.create-game-section,
+.games-section {
+    background: white;
+    padding: 1.5rem;
+    border-radius: 12px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    min-height: 400px;
+}
+
+/* Visual States für UI-Feedback */
+.ui-state-loading {
+    opacity: 0.7;
+    pointer-events: none;
+    position: relative;
+}
+
+.ui-state-loading::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255, 255, 255, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: inherit;
+    z-index: 10;
+}
+
+/* Responsive Anpassungen */
+@media (max-width: 1024px) {
+    #gameListSection,
+    #gameListSection.show-grid {
+        grid-template-columns: 1fr !important;
+        gap: 1.5rem !important;
+    }
+    
+    .layout-state-default #gameListSection {
+        grid-template-columns: 1fr !important;
+    }
+}
+
+@media (max-width: 768px) {
+    .lobby-main {
+        padding: 1rem;
+    }
+    
+    #gameListSection,
+    #gameListSection.show-grid {
+        grid-template-columns: 1fr !important;
+        gap: 1rem !important;
+    }
+    
+    .create-game-section,
+    .games-section {
+        padding: 1rem;
+        min-height: 300px;
+    }
+    
+    #gameLobbySection {
+        padding: 1rem;
+        margin-bottom: 0.5rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .lobby-main {
+        padding: 0.5rem;
+    }
+    
+    #gameListSection {
+        gap: 0.5rem !important;
+    }
+    
+    .create-game-section,
+    .games-section {
+        padding: 0.75rem;
+        min-height: 250px;
+    }
+}
+
+/* Debug-Styles (nur während Entwicklung aktiv) */
+.layout-debug #gameListSection {
+    border: 2px solid red !important;
+}
+
+.layout-debug #gameLobbySection {
+    border: 2px solid blue !important;
+}
+
+.layout-debug .layout-state-default #gameListSection::before {
+    content: "DEFAULT LAYOUT - VISIBLE";
+    position: absolute;
+    top: -20px;
+    left: 0;
+    background: red;
+    color: white;
+    padding: 2px 8px;
+    font-size: 10px;
+    z-index: 1000;
+}
+
+.layout-debug .layout-state-game-lobby #gameLobbySection::before {
+    content: "GAME LOBBY LAYOUT - VISIBLE";
+    position: absolute;
+    top: -20px;
+    left: 0;
+    background: blue;
+    color: white;
+    padding: 2px 8px;
+    font-size: 10px;
+    z-index: 1000;
+}
+
+/* Forciere Anzeige - Wichtigste Overrides für Problembehebung */
+body.layout-state-default #gameListSection {
+    display: grid !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    pointer-events: auto !important;
+}
+
+body.layout-state-default #gameLobbySection {
+    display: none !important;
+    opacity: 0 !important;
+    visibility: hidden !important;
+}
+
+body.layout-state-game-lobby #gameListSection {
+    display: none !important;
+    opacity: 0 !important;
+    visibility: hidden !important;
+}
+
+body.layout-state-game-lobby #gameLobbySection {
+    display: block !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    pointer-events: auto !important;
+}
+
+/* Zusätzliche Stabilität durch Transform-basierte Animations */
+.layout-transform-hide {
+    transform: translateY(-20px) scale(0.95);
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s ease-out;
+    pointer-events: none;
+}
+
+.layout-transform-show {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+    visibility: visible;
+    transition: all 0.4s ease-in;
+    pointer-events: auto;
+}
+
+/* High-Priority Overrides für kritische Layout-Kontrolle */
+.force-hide {
+    display: none !important;
+    opacity: 0 !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+}
+
+.force-show-grid {
+    display: grid !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    pointer-events: auto !important;
+}
+
+.force-show-block {
+    display: block !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    pointer-events: auto !important;
+}

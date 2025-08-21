@@ -1,0 +1,669 @@
+/* Race Selection Styles */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Arial', sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #333;
+    min-height: 100vh;
+}
+
+.race-selection-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+    min-height: 100vh;
+}
+
+/* Header */
+.game-header {
+    background: rgba(255, 255, 255, 0.95);
+    padding: 20px;
+    border-radius: 10px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+.game-header h1 {
+    font-size: 2.5em;
+    color: #4a5568;
+    margin-bottom: 10px;
+    text-align: center;
+}
+
+.game-info {
+    display: flex;
+    justify-content: space-between;
+    font-size: 1.1em;
+    color: #666;
+}
+
+/* Main Content */
+.selection-content {
+    background: rgba(255, 255, 255, 0.95);
+    padding: 30px;
+    border-radius: 15px;
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+}
+
+.instructions {
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+.instructions h2 {
+    font-size: 2em;
+    color: #4a5568;
+    margin-bottom: 10px;
+}
+
+.instructions p {
+    font-size: 1.2em;
+    color: #666;
+    margin-bottom: 20px;
+}
+
+.status-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #f7fafc;
+    padding: 15px;
+    border-radius: 10px;
+    border-left: 4px solid #4299e1;
+}
+
+#selectionStatus {
+    font-weight: bold;
+    color: #4a5568;
+}
+
+.player-count {
+    color: #666;
+    font-size: 0.95em;
+}
+
+/* Races Grid */
+.races-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 20px;
+    margin-bottom: 30px;
+}
+
+.race-card {
+    background: #fff;
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    transition: all 0.3s ease;
+    cursor: pointer;
+    border: 3px solid transparent;
+    position: relative;
+}
+
+.race-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+}
+
+.race-card.selected {
+    border-color: #4299e1;
+    background: linear-gradient(135deg, #ebf8ff, #bee3f8);
+    transform: scale(1.05);
+}
+
+.race-card.confirmed {
+    border-color: #48bb78;
+    background: linear-gradient(135deg, #f0fff4, #c6f6d5);
+}
+
+.race-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.race-color {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    margin-right: 15px;
+    border: 2px solid #e2e8f0;
+}
+
+.race-name {
+    font-size: 1.4em;
+    font-weight: bold;
+    color: #2d3748;
+}
+
+.race-description {
+    color: #666;
+    line-height: 1.5;
+    margin-bottom: 15px;
+}
+
+.race-stats {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.9em;
+    color: #718096;
+}
+
+.unit-count {
+    background: #edf2f7;
+    padding: 5px 10px;
+    border-radius: 15px;
+    font-weight: 500;
+}
+
+.view-details {
+    color: #4299e1;
+    text-decoration: none;
+    font-weight: 500;
+    padding: 5px 10px;
+    border-radius: 5px;
+    transition: background-color 0.2s;
+}
+
+.view-details:hover {
+    background: rgba(66, 153, 225, 0.1);
+}
+
+/* Selection Status Indicators */
+.race-card::before {
+    content: '';
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    opacity: 0;
+    transition: opacity 0.3s;
+}
+
+.race-card.selected::before {
+    opacity: 1;
+    background: #4299e1;
+}
+
+.race-card.confirmed::before {
+    opacity: 1;
+    background: #48bb78;
+    content: '✓';
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+/* Action Buttons */
+.selection-actions {
+    display: flex;
+    gap: 15px;
+    justify-content: center;
+    margin-bottom: 20px;
+}
+
+.btn {
+    padding: 12px 30px;
+    border: none;
+    border-radius: 8px;
+    font-size: 1.1em;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-decoration: none;
+    display: inline-block;
+    text-align: center;
+}
+
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.btn-confirm {
+    background: linear-gradient(135deg, #48bb78, #38a169);
+    color: white;
+}
+
+.btn-confirm:hover:not(:disabled) {
+    background: linear-gradient(135deg, #38a169, #2f855a);
+    transform: translateY(-2px);
+}
+
+.btn-change {
+    background: linear-gradient(135deg, #ed8936, #dd6b20);
+    color: white;
+}
+
+.btn-change:hover {
+    background: linear-gradient(135deg, #dd6b20, #c05621);
+    transform: translateY(-2px);
+}
+
+.btn-back {
+    background: linear-gradient(135deg, #718096, #4a5568);
+    color: white;
+}
+
+.btn-back:hover {
+    background: linear-gradient(135deg, #4a5568, #2d3748);
+    transform: translateY(-2px);
+}
+
+/* Waiting Area */
+.waiting-area {
+    text-align: center;
+    padding: 40px;
+    background: #f7fafc;
+    border-radius: 10px;
+    margin-top: 20px;
+}
+
+.waiting-message h3 {
+    color: #4a5568;
+    margin-bottom: 20px;
+    font-size: 1.5em;
+}
+
+.waiting-message p {
+    color: #666;
+    font-size: 1.1em;
+}
+
+/* Spinner Animation */
+.spinner {
+    width: 50px;
+    height: 50px;
+    border: 4px solid #e2e8f0;
+    border-top: 4px solid #4299e1;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 20px auto;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Modal Styles */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.6);
+    animation: fadeIn 0.3s;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.modal-content {
+    background-color: #fff;
+    margin: 5% auto;
+    padding: 30px;
+    border-radius: 15px;
+    width: 90%;
+    max-width: 600px;
+    position: relative;
+    animation: slideIn 0.3s;
+}
+
+@keyframes slideIn {
+    from { transform: translateY(-50px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+.close {
+    position: absolute;
+    right: 20px;
+    top: 15px;
+    color: #999;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.close:hover {
+    color: #333;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .race-selection-container {
+        padding: 10px;
+    }
+    
+    .game-header h1 {
+        font-size: 2em;
+    }
+    
+    .game-info {
+        flex-direction: column;
+        text-align: center;
+        gap: 10px;
+    }
+    
+    .races-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .selection-actions {
+        flex-direction: column;
+    }
+    
+    .status-info {
+        flex-direction: column;
+        gap: 10px;
+        text-align: center;
+    }
+}
+
+/* Loading State */
+.loading {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+.loading .races-grid::after {
+    content: 'Laden...';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 1.5em;
+    color: #666;
+}
+
+/* =================================================================== */
+/* ADDITIONAL STYLES FÜR RACE DETAILS UND UNIT MODAL */
+/* =================================================================== */
+
+/* Race Details Modal Content */
+.race-details {
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
+.race-header-modal {
+    display: flex;
+    align-items: center;
+    margin-bottom: 20px;
+    padding-bottom: 15px;
+    border-bottom: 2px solid #e2e8f0;
+}
+
+.race-color-large {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    margin-right: 20px;
+    border: 3px solid #e2e8f0;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.race-header-modal h2 {
+    color: #2d3748;
+    font-size: 2em;
+    margin: 0;
+}
+
+.race-description-modal {
+    font-size: 1.1em;
+    color: #4a5568;
+    line-height: 1.6;
+    margin-bottom: 25px;
+    padding: 15px;
+    background: #f7fafc;
+    border-radius: 8px;
+    border-left: 4px solid #4299e1;
+}
+
+/* Units List */
+.units-list {
+    display: grid;
+    gap: 15px;
+}
+
+.units-list h3 {
+    color: #2d3748;
+    font-size: 1.5em;
+    margin-bottom: 15px;
+    border-bottom: 2px solid #e2e8f0;
+    padding-bottom: 8px;
+}
+
+.unit-card {
+    background: #fff;
+    border: 2px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 15px;
+    transition: all 0.3s ease;
+}
+
+.unit-card:hover {
+    border-color: #4299e1;
+    box-shadow: 0 4px 12px rgba(66, 153, 225, 0.15);
+    transform: translateY(-2px);
+}
+
+.unit-card h4 {
+    color: #2d3748;
+    font-size: 1.2em;
+    margin-bottom: 10px;
+    font-weight: 600;
+}
+
+.unit-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.unit-stats span {
+    background: #edf2f7;
+    padding: 4px 8px;
+    border-radius: 15px;
+    font-size: 0.85em;
+    font-weight: 500;
+    color: #4a5568;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.unit-stats span:nth-child(1) { background: #fed7d7; color: #c53030; } /* Kosten */
+.unit-stats span:nth-child(2) { background: #fbb6ce; color: #b83280; } /* Angriff */
+.unit-stats span:nth-child(3) { background: #c6f6d5; color: #2f855a; } /* Leben */
+.unit-stats span:nth-child(4) { background: #bee3f8; color: #2b6cb0; } /* Bewegung */
+.unit-stats span:nth-child(5) { background: #faf089; color: #744210; } /* Reichweite */
+
+.unit-description {
+    color: #666;
+    font-style: italic;
+    line-height: 1.4;
+    margin: 0;
+    padding-top: 8px;
+    border-top: 1px solid #e2e8f0;
+}
+
+/* No races message */
+.no-races {
+    text-align: center;
+    color: #666;
+    font-size: 1.2em;
+    padding: 40px;
+    background: #f7fafc;
+    border-radius: 10px;
+    border: 2px dashed #cbd5e0;
+}
+
+/* Enhanced Loading States */
+.race-card.loading {
+    position: relative;
+    overflow: hidden;
+}
+
+.race-card.loading::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(255, 255, 255, 0.6),
+        transparent
+    );
+    animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+    0% { left: -100%; }
+    100% { left: 100%; }
+}
+
+/* Connection Status Indicator */
+.connection-status {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 0.9em;
+    font-weight: 500;
+    z-index: 1000;
+    transition: all 0.3s ease;
+}
+
+.connection-status.connected {
+    background: #c6f6d5;
+    color: #2f855a;
+    border: 2px solid #9ae6b4;
+}
+
+.connection-status.disconnected {
+    background: #fed7d7;
+    color: #c53030;
+    border: 2px solid #fc8181;
+}
+
+.connection-status.connecting {
+    background: #faf089;
+    color: #744210;
+    border: 2px solid #f6e05e;
+}
+
+/* Error Messages */
+.error-message {
+    background: #fed7d7;
+    color: #c53030;
+    padding: 15px;
+    border-radius: 8px;
+    border-left: 4px solid #e53e3e;
+    margin: 15px 0;
+    font-weight: 500;
+}
+
+.success-message {
+    background: #c6f6d5;
+    color: #2f855a;
+    padding: 15px;
+    border-radius: 8px;
+    border-left: 4px solid #38a169;
+    margin: 15px 0;
+    font-weight: 500;
+}
+
+/* Mobile Optimizations for Modal */
+@media (max-width: 480px) {
+    .modal-content {
+        margin: 2% auto;
+        width: 95%;
+        padding: 20px;
+    }
+    
+    .unit-stats {
+        grid-template-columns: 1fr 1fr;
+    }
+    
+    .race-header-modal {
+        flex-direction: column;
+        text-align: center;
+    }
+    
+    .race-color-large {
+        margin-right: 0;
+        margin-bottom: 15px;
+    }
+    
+    .connection-status {
+        position: relative;
+        top: auto;
+        right: auto;
+        margin: 10px auto;
+        display: block;
+        text-align: center;
+        width: fit-content;
+    }
+}
+
+/* Smooth transitions for dynamic content */
+.fade-in {
+    animation: fadeIn 0.5s ease-in;
+}
+
+.slide-up {
+    animation: slideUp 0.4s ease-out;
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Custom Scrollbar für bessere UX */
+.race-details::-webkit-scrollbar {
+    width: 8px;
+}
+
+.race-details::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+.race-details::-webkit-scrollbar-thumb {
+    background: #cbd5e0;
+    border-radius: 4px;
+}
+
+.race-details::-webkit-scrollbar-thumb:hover {
+    background: #a0aec0;
+}

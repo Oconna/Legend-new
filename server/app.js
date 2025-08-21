@@ -5,10 +5,12 @@ const cors = require('cors');
 const path = require('path');
 require('dotenv').config();
 
-// Import controller modules
+// Import Controllers und Event Handlers
 const improvedLobbyManager = require('./controllers/improvedLobbyManager');
 const gameController = require('./controllers/gameController');
 const db = require('./config/database');
+const raceController = require('./controllers/raceController');
+const { setupRaceSelectionEvents } = require('./events/raceSocketEvents');
 
 // Express App Setup
 const app = express();
@@ -255,6 +257,8 @@ app.get('/api/chat/stats', (req, res) => {
 io.on('connection', (socket) => {
     console.log(`User connected: ${socket.id}`);
 
+    setupGameLobbyEvents(socket);
+    setupRaceSelectionEvents(io, socket); // Neue Rassenauswahl Events
 
     // Heartbeat/Ping
     socket.on('ping', () => {

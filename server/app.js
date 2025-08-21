@@ -120,33 +120,42 @@ async function broadcastRaceSelectionSync(gameId) {
 // Setup Game Lobby Events
 function setupGameLobbyEvents(socket) {
     // Join game
-    socket.on('join_game', (data) => {
-        try {
-            console.log('Join game request:', data);
-            const result = improvedLobbyManager.joinGame(socket.id, data.gameId, data.playerName);
+socket.on('join_game', async (data) => {
+    try {
+        console.log('Join game request:', data);
+        const result = await improvedLobbyManager.joinGame(socket.id, data.playerName, data.gameId);
+        
+        if (result.success) {
+            socket.join(`game_${result.gameId}`);
+            socket.emit('game_joined', result);
             
-            if (result.success) {
-                socket.join(`game_${data.gameId}`);
-                socket.emit('game_joined', result);
-                
-                // Notify all players in the game
-                io.to(`game_${data.gameId}`).emit('player_joined', {
-                    playerName: data.playerName,
-                    players: result.players
-                });
-                
-                // Broadcast updated games list to all clients
-                io.emit('games_updated', improvedLobbyManager.getAvailableGames());
-                
-                console.log(`Player ${data.playerName} joined game ${data.gameId}`);
-            } else {
-                socket.emit('error', result.message);
-            }
-        } catch (error) {
-            console.error('Error in join_game:', error);
-            socket.emit('error', 'Fehler beim Beitreten des Spiels');
+            // Notify other players
+            socket.to(`game_${result.gameId}`).emit('player_joined', {
+                playerName: data.playerName
+            });
+            
+            // WICHTIG: Send updated player list to ALL players in the game room INCLUDING the joining player
+            io.to(`game_${result.gameId}`).emit('lobby_players_updated', result.players);
+            
+            // WICHTIG: Update player count in the game info section
+            io.to(`game_${result.gameId}`).emit('game_info_updated', {
+                currentPlayers: result.players.length,
+                maxPlayers: result.maxPlayers,
+                players: result.players
+            });
+            
+            // Update games list for everyone immediately
+            io.emit('games_updated', improvedLobbyManager.getAvailableGames());
+            
+            console.log(`Player ${data.playerName} joined game, broadcasting to all clients`);
+        } else {
+            socket.emit('error', result.message);
         }
-    });
+    } catch (error) {
+        console.error('Error in join_game:', error);
+        socket.emit('error', 'Fehler beim Beitreten des Spiels: ' + error.message);
+    }
+});
 
     // Player ready
     socket.on('player_ready', (data) => {
@@ -175,118 +184,145 @@ function setupGameLobbyEvents(socket) {
     });
 
     // Start game
-    socket.on('start_game', async (data) => {
-        try {
-            console.log('Start game request:', data);
-            
-            // Zuerst prüfen ob alle Spieler bereit sind
-            const game = improvedLobbyManager.getGame(data.gameId);
-            if (!game) {
-                socket.emit('error', 'Spiel nicht gefunden');
-                return;
-            }
-
-            const allReady = game.players.every(player => player.isReady);
-            if (!allReady) {
-                socket.emit('error', 'Nicht alle Spieler sind bereit');
-                return;
-            }
-
-            // Spiel in Datenbank erstellen
-            const dbResult = await gameController.createGame(data.gameId, game);
-            if (dbResult.success) {
-                // Memory-Game als "started" markieren
-                improvedLobbyManager.startGame(data.gameId);
-                
-                // Alle Spieler benachrichtigen
-                io.to(`game_${data.gameId}`).emit('game_starting', {
-                    message: 'Spiel startet! Wechsle zur Rassenauswahl...',
-                    gameId: data.gameId
-                });
-
-                // Kurz warten, dann zur Rassenauswahl weiterleiten
-                setTimeout(() => {
-                    io.to(`game_${data.gameId}`).emit('redirect_to_race_selection', {
-                        gameId: data.gameId,
-                        url: `/race-selection.html?gameId=${data.gameId}`
-                    });
-                }, 2000);
-
-                // Games list aktualisieren
-                io.emit('games_updated', improvedLobbyManager.getAvailableGames());
-                
-                console.log(`✓ Game ${data.gameId} started and moved to race selection`);
-            } else {
-                socket.emit('error', dbResult.message || 'Fehler beim Erstellen des Spiels in der Datenbank');
-            }
-        } catch (error) {
-            console.error('Error in start_game:', error);
-            socket.emit('error', 'Fehler beim Starten des Spiels: ' + error.message);
+socket.on('start_game', async (data) => {
+    try {
+        const playerData = improvedLobbyManager.players.get(socket.id);
+        
+        if (!playerData) {
+            socket.emit('error', 'Spieler nicht gefunden');
+            return;
         }
-    });
+
+        if (!playerData.isHost) {
+            socket.emit('error', 'Nur der Host kann das Spiel starten');
+            return;
+        }
+
+        const gameId = playerData.gameId;
+        const readyResult = improvedLobbyManager.setPlayerReady(socket.id, true);
+        
+        if (!readyResult.success || !readyResult.canStart) {
+            socket.emit('error', 'Nicht alle Spieler sind bereit');
+            return;
+        }
+
+        // Start race selection phase
+        const raceResult = await improvedLobbyManager.startRaceSelection(gameId);
+        
+        if (raceResult.success) {
+            // Notify all players in the game
+            io.to(`game_${gameId}`).emit('game_started', {
+                gameId: gameId,
+                gameDbId: raceResult.gameDbId, // WICHTIG: DB-ID für Race Selection
+                message: 'Das Spiel startet! Wähle deine Rasse aus.'
+            });
+            
+            // Update games list (game no longer available for joining)
+            io.emit('games_updated', improvedLobbyManager.getAvailableGames());
+            
+            console.log(`Game ${gameId} started race selection phase (DB ID: ${raceResult.gameDbId})`);
+        } else {
+            socket.emit('error', raceResult.message);
+        }
+
+    } catch (error) {
+        console.error('Error starting game:', error);
+        socket.emit('error', 'Fehler beim Starten des Spiels: ' + error.message);
+    }
+});
 
     // Leave game
-    socket.on('leave_game', (data) => {
-        try {
-            console.log('Leave game request:', data);
-            const result = improvedLobbyManager.removePlayer(data.gameId, socket.id);
+socket.on('leave_game', async (data) => {
+    try {
+        const playerData = improvedLobbyManager.players.get(socket.id);
+        
+        if (!playerData) {
+            socket.emit('error', 'Du bist in keinem Spiel');
+            return;
+        }
+
+        const gameId = playerData.gameId;
+        const playerName = playerData.name;
+        
+        const result = await improvedLobbyManager.leaveGame(socket.id);
+        
+        if (result.success) {
+            socket.leave(`game_${gameId}`);
             
-            if (result.success) {
-                socket.leave(`game_${data.gameId}`);
+            socket.emit('game_left', {
+                gameDeleted: result.gameDeleted,
+                message: result.gameDeleted ? 
+                    'Spiel wurde gelöscht (letzter Spieler)' : 'Du hast das Spiel verlassen'
+            });
+
+            if (!result.gameDeleted) {
+                // Notify remaining players
+                socket.to(`game_${gameId}`).emit('player_left', {
+                    playerName: playerName
+                });
                 
-                // Notify other players
-                socket.to(`game_${data.gameId}`).emit('player_left', {
-                    playerName: data.playerName,
+                // WICHTIG: Send updated player list to remaining players
+                io.to(`game_${gameId}`).emit('lobby_players_updated', result.players);
+                
+                // WICHTIG: Update player count in the game info section
+                io.to(`game_${gameId}`).emit('game_info_updated', {
+                    currentPlayers: result.players.length,
+                    maxPlayers: result.maxPlayers || 8, // fallback
                     players: result.players
                 });
                 
-                // If game was destroyed, notify everyone
-                if (result.gameDestroyed) {
-                    socket.to(`game_${data.gameId}`).emit('game_destroyed', {
-                        message: 'Spiel wurde aufgelöst'
-                    });
-                }
-                
-                // Broadcast updated games list
-                io.emit('games_updated', improvedLobbyManager.getAvailableGames());
-                
-                console.log(`Player left game ${data.gameId}`);
-            } else {
-                socket.emit('error', result.message);
+                console.log(`📊 Updated remaining ${result.players.length} players in game ${gameId}`);
             }
-        } catch (error) {
-            console.error('Error in leave_game:', error);
-            socket.emit('error', 'Fehler beim Verlassen des Spiels');
+            
+            // Update games list for everyone
+            io.emit('games_updated', improvedLobbyManager.getAvailableGames());
+            
+            console.log(`✅ Player ${playerName} successfully left game ${gameId}`);
+            
+        } else {
+            socket.emit('error', result.message);
         }
-    });
+    } catch (error) {
+        console.error('❌ Error in leave_game:', error);
+        socket.emit('error', 'Fehler beim Verlassen des Spiels');
+    }
+});
 
     // Disconnect handling
-    socket.on('disconnect', () => {
-        try {
-            console.log(`Socket ${socket.id} disconnected`);
-            const result = improvedLobbyManager.handleDisconnect(socket.id);
+socket.on('disconnect', async () => {
+    try {
+        console.log(`🔌 Socket ${socket.id} disconnected`);
+        
+        const playerData = improvedLobbyManager.players.get(socket.id);
+        
+        // Clean up lobby manager
+        if (playerData) {
+            const gameId = playerData.gameId;
+            const playerName = playerData.name;
             
-            if (result.gamesAffected.length > 0) {
-                result.gamesAffected.forEach(gameData => {
-                    if (gameData.gameDestroyed) {
-                        io.to(`game_${gameData.gameId}`).emit('game_destroyed', {
-                            message: 'Spiel wurde aufgelöst (Host getrennt)'
-                        });
-                    } else {
-                        io.to(`game_${gameData.gameId}`).emit('player_left', {
-                            playerName: gameData.playerName,
-                            players: gameData.players
-                        });
-                    }
+            console.log(`🧹 Cleaning up disconnected player ${playerName} from game ${gameId}`);
+            
+            const result = await improvedLobbyManager.handleDisconnect(socket.id);
+            
+            // Notify remaining players if game wasn't deleted
+            if (result && !result.gameDeleted) {
+                io.to(`game_${gameId}`).emit('player_left', {
+                    playerName: playerName
                 });
                 
-                // Broadcast updated games list
-                io.emit('games_updated', improvedLobbyManager.getAvailableGames());
+                io.to(`game_${gameId}`).emit('lobby_players_updated', result.players);
+                
+                console.log(`📊 Notified remaining players about disconnect`);
             }
-        } catch (error) {
-            console.error('Error handling disconnect:', error);
+            
+            // Update games list
+            io.emit('games_updated', improvedLobbyManager.getAvailableGames());
         }
-    });
+        
+    } catch (error) {
+        console.error('Error handling disconnect:', error);
+    }
+});
 }
 
 // Routes
@@ -456,27 +492,27 @@ io.on('connection', (socket) => {
     });
 
     // Create new game
-    socket.on('create_game', (data) => {
-        try {
-            console.log('Create game request:', data);
-            const result = improvedLobbyManager.createGame(socket.id, data.playerName, data.gameName, data.maxPlayers, data.mapSize);
+socket.on('create_game', async (data) => {
+    try {
+        console.log('Create game request:', data);
+        const result = await improvedLobbyManager.createGame(socket.id, data.playerName, data.gameName, data.maxPlayers, data.mapSize);
+        
+        if (result.success) {
+            socket.join(`game_${result.gameId}`);
+            socket.emit('game_created', result);
             
-            if (result.success) {
-                socket.join(`game_${result.gameId}`);
-                socket.emit('game_created', result);
-                
-                // Broadcast updated games list to all clients
-                io.emit('games_updated', improvedLobbyManager.getAvailableGames());
-                
-                console.log(`Game created by ${data.playerName}, broadcasting to all clients`);
-            } else {
-                socket.emit('error', result.message);
-            }
-        } catch (error) {
-            console.error('Error in create_game:', error);
-            socket.emit('error', 'Fehler beim Erstellen des Spiels');
+            // Broadcast updated games list to all clients
+            io.emit('games_updated', improvedLobbyManager.getAvailableGames());
+            
+            console.log(`Game created by ${data.playerName}, broadcasting to all clients`);
+        } else {
+            socket.emit('error', result.message);
         }
-    });
+    } catch (error) {
+        console.error('Error in create_game:', error);
+        socket.emit('error', 'Fehler beim Erstellen des Spiels: ' + error.message);
+    }
+});
 
     // Chat Events
     socket.on('join_chat_room', (data) => {

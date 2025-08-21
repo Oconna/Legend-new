@@ -1,18 +1,30 @@
-// Socket Events für Rassenauswahl
+// KORRIGIERTE Race Socket Events - Fix für "Spiel nicht gefunden" Error
 const raceController = require('../controllers/raceController');
 const gameController = require('../controllers/gameController');
+const improvedLobbyManager = require('../controllers/improvedLobbyManager');
 
 function setupRaceSelectionEvents(io, socket) {
     console.log(`Setting up race selection events for socket ${socket.id}`);
 
-    // Spieler tritt der Rassenauswahl bei
+    // Spieler tritt der Rassenauswahl bei - KORRIGIERT
     socket.on('join-race-selection', async (data) => {
         try {
             console.log(`Player ${data.playerName} joining race selection for game ${data.gameId}`);
 
-            // Prüfe ob das Spiel existiert und in der richtigen Phase ist
-            const gameResult = await gameController.getGameInfo(data.gameId);
+            // KORRIGIERT: Prüfe zuerst Memory, dann Datenbank
+            let gameDbId = data.gameId;
+            
+            // Falls gameId eine Memory-ID ist, hole die DB-ID
+            const gameInfo = improvedLobbyManager.getGameInfo(data.gameId);
+            if (gameInfo && gameInfo.gameDbId) {
+                gameDbId = gameInfo.gameDbId;
+                console.log(`Using DB ID ${gameDbId} from memory ID ${data.gameId}`);
+            }
+
+            // Prüfe ob das Spiel in der Datenbank existiert und in der richtigen Phase ist
+            const gameResult = await gameController.getGameInfo(gameDbId);
             if (!gameResult.success) {
+                console.error(`Game not found in DB: ${gameDbId}`);
                 socket.emit('error', { message: 'Spiel nicht gefunden' });
                 return;
             }
@@ -23,221 +35,322 @@ function setupRaceSelectionEvents(io, socket) {
                 return;
             }
 
-            // Füge Socket zu Spielraum hinzu
-            const roomName = `race-selection-${data.gameId}`;
+            // Füge Socket zu Spielraum hinzu (verwende DB-ID)
+            const roomName = `race-selection-${gameDbId}`;
             socket.join(roomName);
             
             // Speichere Spielerinformationen in Socket
-            socket.gameId = data.gameId;
+            socket.gameId = data.gameId; // Memory ID
+            socket.gameDbId = gameDbId;  // DB ID
             socket.playerName = data.playerName;
             socket.roomName = roomName;
 
             // Bestätige Beitritt
             socket.emit('race-selection-joined', {
                 success: true,
-                game: game,
-                message: 'Erfolgreich der Rassenauswahl beigetreten'
+                gameId: data.gameId,
+                gameDbId: gameDbId,
+                playerName: data.playerName,
+                roomName: roomName
             });
 
-            // Sende Updates an alle Spieler im Raum
-            await broadcastRaceSelectionUpdate(io, data.gameId);
-
-            console.log(`✓ Player ${data.playerName} joined race selection room: ${roomName}`);
+            console.log(`✅ Player ${data.playerName} joined race selection room: ${roomName}`);
 
         } catch (error) {
-            console.error('Error joining race selection:', error);
-            socket.emit('error', { message: 'Fehler beim Beitreten der Rassenauswahl' });
+            console.error('Error in join-race-selection:', error);
+            socket.emit('error', { message: 'Fehler beim Beitreten der Rassenauswahl: ' + error.message });
         }
     });
 
-    // Hole verfügbare Rassen
+    // Verfügbare Rassen abrufen - KORRIGIERT
     socket.on('get-available-races', async (data) => {
         try {
-            console.log(`Loading available races for game ${data.gameId}`);
+            console.log(`Getting available races for game ${data.gameId}`);
+            
+            // KORRIGIERT: Verwende gameDbId falls verfügbar
+            let gameDbId = data.gameId;
+            if (socket.gameDbId) {
+                gameDbId = socket.gameDbId;
+            } else {
+                // Versuche DB-ID aus Memory zu holen
+                const gameInfo = improvedLobbyManager.getGameInfo(data.gameId);
+                if (gameInfo && gameInfo.gameDbId) {
+                    gameDbId = gameInfo.gameDbId;
+                }
+            }
 
-            const result = await raceController.getAvailableRaces();
+            const racesResult = await raceController.getAvailableRaces(gameDbId);
+            
+            if (racesResult.success) {
+                socket.emit('available-races', racesResult.races);
+                console.log(`✅ Sent ${racesResult.races.length} available races to player`);
+            } else {
+                socket.emit('error', { message: racesResult.message });
+            }
+
+        } catch (error) {
+            console.error('Error getting available races:', error);
+            socket.emit('error', { message: 'Fehler beim Laden der Rassen: ' + error.message });
+        }
+    });
+
+    // Alternative Event Namen für bessere Kompatibilität
+    socket.on('get_available_races', async (data) => {
+        socket.emit('get-available-races', data);
+    });
+
+    // Rasse auswählen - KORRIGIERT
+    socket.on('select-race', async (data) => {
+        try {
+            console.log(`Player ${socket.playerName} selecting race ${data.raceId} for game ${data.gameId}`);
+
+            // KORRIGIERT: Verwende gameDbId
+            let gameDbId = data.gameId;
+            if (socket.gameDbId) {
+                gameDbId = socket.gameDbId;
+            } else {
+                const gameInfo = improvedLobbyManager.getGameInfo(data.gameId);
+                if (gameInfo && gameInfo.gameDbId) {
+                    gameDbId = gameInfo.gameDbId;
+                }
+            }
+
+            const result = await raceController.selectRace(gameDbId, socket.playerName, data.raceId);
+            
             if (result.success) {
-                socket.emit('available-races', result.races);
+                // Bestätige Auswahl an den Spieler
+                socket.emit('race-selected', {
+                    success: true,
+                    playerName: result.playerName,
+                    raceId: result.raceId,
+                    raceName: result.raceName
+                });
+
+                // Informiere alle Spieler in der Rassenauswahl über die Änderung
+                const roomName = `race-selection-${gameDbId}`;
+                socket.to(roomName).emit('race-selection-update', {
+                    playerName: result.playerName,
+                    raceId: result.raceId,
+                    raceName: result.raceName,
+                    confirmed: false
+                });
+
+                console.log(`✅ Race ${result.raceName} selected by ${result.playerName}`);
+
             } else {
                 socket.emit('error', { message: result.message });
             }
 
         } catch (error) {
-            console.error('Error getting available races:', error);
-            socket.emit('error', { message: 'Fehler beim Laden der Rassen' });
-        }
-    });
-
-    // Hole Rassendetails
-    socket.on('get-race-details', async (data) => {
-        try {
-            console.log(`Loading race details for race ${data.raceId}`);
-
-            const result = await raceController.getRaceDetails(data.raceId);
-            if (result.success) {
-                socket.emit('race-details', {
-                    success: true,
-                    race: result.race,
-                    units: result.units
-                });
-            } else {
-                socket.emit('race-details', { success: false, message: result.message });
-            }
-
-        } catch (error) {
-            console.error('Error getting race details:', error);
-            socket.emit('race-details', { success: false, message: 'Fehler beim Laden der Rassendetails' });
-        }
-    });
-
-    // Spieler wählt Rasse aus
-    socket.on('select-race', async (data) => {
-        try {
-            console.log(`Player ${data.playerName} selecting race ${data.raceId} for game ${data.gameId}`);
-
-            const result = await raceController.selectRace(data.gameId, data.playerName, data.raceId);
-            
-            // Antwort an den Spieler
-            socket.emit('race-selected', result);
-
-            if (result.success) {
-                // Broadcastе Update an alle Spieler
-                await broadcastRaceSelectionUpdate(io, data.gameId);
-            }
-
-        } catch (error) {
             console.error('Error selecting race:', error);
-            socket.emit('race-selected', { success: false, message: 'Fehler bei der Rassenauswahl' });
+            socket.emit('error', { message: 'Fehler bei der Rassenauswahl: ' + error.message });
         }
     });
 
-    // Spieler bestätigt Rassenauswahl
+    // Rasse bestätigen - KORRIGIERT
     socket.on('confirm-race', async (data) => {
         try {
-            console.log(`Player ${data.playerName} confirming race for game ${data.gameId}`);
+            console.log(`Player ${socket.playerName} confirming race for game ${data.gameId}`);
 
-            const result = await raceController.confirmRace(data.gameId, data.playerName);
-            
-            // Antwort an den Spieler
-            socket.emit('race-confirmed', result);
-
-            if (result.success) {
-                // Broadcastе Update an alle Spieler
-                await broadcastRaceSelectionUpdate(io, data.gameId);
-
-                // Wenn alle Spieler bereit sind, starte Kartengenerierung
-                if (result.allReady) {
-                    console.log(`All players ready for game ${data.gameId}, starting map generation...`);
-                    
-                    // Benachrichtige alle Spieler
-                    io.to(`race-selection-${data.gameId}`).emit('all-races-selected');
-
-                    // Starte Kartengenerierung
-                    const mapResult = await raceController.startMapGeneration(data.gameId);
-                    if (mapResult.success) {
-                        // Generiere die eigentliche Karte (später implementiert)
-                        setTimeout(async () => {
-                            // Simuliere Kartengenerierung (später durch echte Logik ersetzen)
-                            console.log(`Map generation completed for game ${data.gameId}`);
-                            
-                            // Benachrichtige alle Spieler dass das Spiel startet
-                            io.to(`race-selection-${data.gameId}`).emit('game-started', {
-                                gameId: data.gameId,
-                                message: 'Karte generiert - Spiel startet!'
-                            });
-                        }, 3000); // 3 Sekunden Simulation
-                    }
+            // KORRIGIERT: Verwende gameDbId
+            let gameDbId = data.gameId;
+            if (socket.gameDbId) {
+                gameDbId = socket.gameDbId;
+            } else {
+                const gameInfo = improvedLobbyManager.getGameInfo(data.gameId);
+                if (gameInfo && gameInfo.gameDbId) {
+                    gameDbId = gameInfo.gameDbId;
                 }
+            }
+
+            const result = await raceController.confirmRace(gameDbId, socket.playerName);
+            
+            if (result.success) {
+                // Bestätige Bestätigung an den Spieler
+                socket.emit('race-confirmed', {
+                    success: true,
+                    playerName: result.playerName,
+                    raceId: result.raceId,
+                    raceName: result.raceName
+                });
+
+                // Informiere alle Spieler über die Bestätigung
+                const roomName = `race-selection-${gameDbId}`;
+                io.to(roomName).emit('race-selection-update', {
+                    playerName: result.playerName,
+                    raceId: result.raceId,
+                    raceName: result.raceName,
+                    confirmed: true
+                });
+
+                // Prüfe ob alle Spieler ihre Rasse bestätigt haben
+                const allConfirmedResult = await raceController.checkAllRacesConfirmed(gameDbId);
+                
+                if (allConfirmedResult.success && allConfirmedResult.allConfirmed) {
+                    console.log(`🎮 All races confirmed for game ${gameDbId}, starting map generation...`);
+                    
+                    // Alle Rassen bestätigt - starte Kartengenerierung
+                    io.to(roomName).emit('all-races-confirmed', {
+                        gameId: data.gameId,
+                        gameDbId: gameDbId,
+                        message: 'Alle Spieler haben ihre Rassen bestätigt! Die Karte wird generiert...'
+                    });
+
+                    // TODO: Hier später Kartengenerierung starten
+                    // await mapController.generateMap(gameDbId);
+                }
+
+                console.log(`✅ Race confirmed by ${result.playerName}`);
+
+            } else {
+                socket.emit('error', { message: result.message });
             }
 
         } catch (error) {
             console.error('Error confirming race:', error);
-            socket.emit('race-confirmed', { success: false, message: 'Fehler bei der Rassenbestätigung' });
+            socket.emit('error', { message: 'Fehler bei der Rassenbestätigung: ' + error.message });
         }
     });
 
-    // Spieler hebt Rassenauswahl auf
-    socket.on('deselect-race', async (data) => {
+    // Aktuelle Rassenauswahlen abrufen - KORRIGIERT
+    socket.on('get-race-selections', async (data) => {
         try {
-            console.log(`Player ${data.playerName} deselecting race for game ${data.gameId}`);
+            // KORRIGIERT: Verwende gameDbId
+            let gameDbId = data.gameId;
+            if (socket.gameDbId) {
+                gameDbId = socket.gameDbId;
+            } else {
+                const gameInfo = improvedLobbyManager.getGameInfo(data.gameId);
+                if (gameInfo && gameInfo.gameDbId) {
+                    gameDbId = gameInfo.gameDbId;
+                }
+            }
 
-            const result = await raceController.deselectRace(data.gameId, data.playerName);
+            const result = await raceController.getAllRaceSelections(gameDbId);
             
-            // Antwort an den Spieler
-            socket.emit('race-deselected', result);
-
             if (result.success) {
-                // Broadcast Update an alle Spieler
-                await broadcastRaceSelectionUpdate(io, data.gameId);
+                socket.emit('race-selections', {
+                    gameId: data.gameId,
+                    gameDbId: gameDbId,
+                    selections: result.selections
+                });
+            } else {
+                socket.emit('error', { message: result.message });
             }
 
         } catch (error) {
-            console.error('Error deselecting race:', error);
-            socket.emit('race-deselected', { success: false, message: 'Fehler beim Zurücksetzen der Rassenauswahl' });
+            console.error('Error getting race selections:', error);
+            socket.emit('error', { message: 'Fehler beim Laden der Rassenauswahlen: ' + error.message });
         }
     });
 
-    // Spieler verlässt Rassenauswahl
-    socket.on('leave-race-selection', async () => {
+    // Rassenauswahl zurücksetzen (nur für Host) - KORRIGIERT
+    socket.on('reset-race-selections', async (data) => {
         try {
-            if (socket.gameId && socket.roomName) {
-                console.log(`Player ${socket.playerName} leaving race selection for game ${socket.gameId}`);
-                
+            console.log(`Resetting race selections for game ${data.gameId}`);
+
+            // KORRIGIERT: Verwende gameDbId
+            let gameDbId = data.gameId;
+            if (socket.gameDbId) {
+                gameDbId = socket.gameDbId;
+            } else {
+                const gameInfo = improvedLobbyManager.getGameInfo(data.gameId);
+                if (gameInfo && gameInfo.gameDbId) {
+                    gameDbId = gameInfo.gameDbId;
+                }
+            }
+
+            // Prüfe ob Spieler Host ist (aus Memory)
+            const playerData = improvedLobbyManager.players.get(socket.id);
+            if (!playerData || !playerData.isHost) {
+                socket.emit('error', { message: 'Nur der Host kann die Rassenauswahlen zurücksetzen' });
+                return;
+            }
+
+            const result = await raceController.resetRaceSelections(gameDbId);
+            
+            if (result.success) {
+                // Informiere alle Spieler über das Zurücksetzen
+                const roomName = `race-selection-${gameDbId}`;
+                io.to(roomName).emit('race-selections-reset', {
+                    gameId: data.gameId,
+                    gameDbId: gameDbId,
+                    message: 'Rassenauswahlen wurden zurückgesetzt'
+                });
+
+                console.log(`✅ Race selections reset for game ${gameDbId}`);
+
+            } else {
+                socket.emit('error', { message: result.message });
+            }
+
+        } catch (error) {
+            console.error('Error resetting race selections:', error);
+            socket.emit('error', { message: 'Fehler beim Zurücksetzen: ' + error.message });
+        }
+    });
+
+    // Spiel verlassen (von Rassenauswahl) - KORRIGIERT
+    socket.on('leave-race-selection', async (data) => {
+        try {
+            console.log(`Player ${socket.playerName} leaving race selection`);
+
+            if (socket.roomName) {
                 socket.leave(socket.roomName);
+                console.log(`Player left room: ${socket.roomName}`);
+            }
+
+            // Zurück zum Lobby-Manager
+            if (socket.gameId) {
+                const result = await improvedLobbyManager.leaveGame(socket.id);
                 
-                // Broadcast Update an verbleibende Spieler
-                await broadcastRaceSelectionUpdate(io, socket.gameId);
+                if (result.success) {
+                    socket.emit('returned-to-lobby', {
+                        success: true,
+                        message: 'Zurück zur Lobby'
+                    });
+                } else {
+                    socket.emit('error', { message: result.message });
+                }
             }
 
         } catch (error) {
             console.error('Error leaving race selection:', error);
+            socket.emit('error', { message: 'Fehler beim Verlassen: ' + error.message });
         }
     });
 
-    // Disconnect Handling
-    socket.on('disconnect', async () => {
+    // Disconnect cleanup - KORRIGIERT
+    socket.on('disconnect', () => {
         try {
-            if (socket.gameId && socket.playerName) {
-                console.log(`Player ${socket.playerName} disconnected from race selection`);
-                
-                // Broadcast Update an verbleibende Spieler
-                await broadcastRaceSelectionUpdate(io, socket.gameId);
+            console.log(`Socket ${socket.id} disconnected from race selection`);
+            
+            if (socket.roomName) {
+                socket.leave(socket.roomName);
+                console.log(`Socket left race selection room: ${socket.roomName}`);
             }
 
         } catch (error) {
-            console.error('Error handling disconnect in race selection:', error);
+            console.error('Error in race selection disconnect:', error);
         }
     });
 }
 
-// Hilfsfunktion: Broadcast Race Selection Updates an alle Spieler
-async function broadcastRaceSelectionUpdate(io, gameId) {
-    try {
-        // Hole aktuelle Auswahlstände (ohne Details zu zeigen wer was gewählt hat)
-        const selectionsResult = await raceController.getAllRaceSelections(gameId);
-        const readyCountResult = await raceController.getReadyCount(gameId);
-
-        if (selectionsResult.success && readyCountResult.success) {
-            const roomName = `race-selection-${gameId}`;
-            
-            // Sende Update an alle Spieler im Raum
-            // Hinweis: Wir senden nur die Anzahl bereiter Spieler, nicht wer was gewählt hat
-            io.to(roomName).emit('race-selection-update', {
-                readyCount: readyCountResult.readyCount,
-                totalPlayers: readyCountResult.totalPlayers,
-                // selections werden nicht gesendet um Geheimhaltung zu wahren
-                selections: [] // Leeres Array - andere Spieler sehen nicht was gewählt wurde
-            });
-
-            console.log(`Broadcasted race selection update to room ${roomName}: ${readyCountResult.readyCount}/${readyCountResult.totalPlayers} ready`);
-        }
-
-    } catch (error) {
-        console.error('Error broadcasting race selection update:', error);
+// NEUE Hilfsfunktion: DB-ID aus verschiedenen Quellen ermitteln
+function resolveGameDbId(gameId, socket, improvedLobbyManager) {
+    // 1. Aus Socket gespeicherte DB-ID
+    if (socket.gameDbId) {
+        return socket.gameDbId;
     }
+    
+    // 2. Aus Memory Manager
+    const gameInfo = improvedLobbyManager.getGameInfo(gameId);
+    if (gameInfo && gameInfo.gameDbId) {
+        return gameInfo.gameDbId;
+    }
+    
+    // 3. Assume gameId ist bereits DB-ID
+    return gameId;
 }
 
-module.exports = {
-    setupRaceSelectionEvents,
-    broadcastRaceSelectionUpdate
-};
+module.exports = { setupRaceSelectionEvents };

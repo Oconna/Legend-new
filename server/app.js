@@ -572,26 +572,27 @@ socket.on('start_game', async (data) => {
             return;
         }
 
-        // Prüfe Host-Berechtigung
-        if (game.host !== socket.id) {
+        // KORRIGIERT: Prüfe Host-Berechtigung
+        if (game.hostSocketId !== socket.id) {
             socket.emit('error', 'Nur der Host kann das Spiel starten');
             return;
         }
 
-        // Prüfe Mindestanzahl Spieler
-        if (game.players.length < 2) {
+        // KORRIGIERT: Prüfe Mindestanzahl Spieler
+        if (game.players.size < 2) {
             socket.emit('error', 'Mindestens 2 Spieler benötigt');
             return;
         }
 
-        console.log(`🎮 Host ${data.playerName} starting game ${data.gameId} with ${game.players.length} players`);
+        console.log(`🎮 Host ${data.playerName} starting game ${data.gameId} with ${game.players.size} players`);
 
         // SCHRITT 1: Spiel in Datenbank erstellen
+        const playersArray = Array.from(game.players.values());
         const dbGameResult = await gameController.createGameInDatabase({
             name: game.name,
             maxPlayers: game.maxPlayers,
             mapSize: game.mapSize,
-            players: game.players,
+            players: playersArray, // KORRIGIERT: Array übergeben
             status: 'race_selection' // WICHTIG: Status auf race_selection setzen
         });
 
@@ -613,10 +614,9 @@ socket.on('start_game', async (data) => {
                 console.log(`🗑️ Removing memory game ${playerData.gameId} after successful DB creation`);
                 
                 // Alle Spieler aus Memory-Spiel entfernen
-                const playersToRemove = [...game.players];
+                const playersToRemove = [...playersArray];
                 playersToRemove.forEach(player => {
-                    const socketId = Object.keys(improvedLobbyManager.players.data || {})
-                        .find(id => improvedLobbyManager.players.get(id)?.name === player.name);
+                    const socketId = player.socketId;
                     if (socketId) {
                         improvedLobbyManager.leaveGame(socketId);
                     }

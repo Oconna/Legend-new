@@ -258,7 +258,7 @@ class GameController {
         }
     }
 	
-	async createGameInDatabase(gameData) {
+    async createGameInDatabase(gameData) {
     try {
         console.log('📝 Creating game in database:', gameData);
 
@@ -285,7 +285,7 @@ class GameController {
             `, [
                 gameId,
                 player.name,
-                player.ready ? 1 : 0,
+                player.isReady ? 1 : 0,
                 index + 1 // Turn order basierend auf Join-Reihenfolge
             ]);
         });

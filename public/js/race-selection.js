@@ -118,16 +118,16 @@ class RaceSelectionClient {
         });
 		
 		// Socket Event für Spielweiterleitung
-this.socket.on('redirect_to_game', (data) => {
-    console.log('📥 Redirect to game:', data);
-    this.handleRedirectToGame(data);
-});
+        this.socket.on('redirect_to_game', (data) => {
+        console.log('📥 Redirect to game:', data);
+        this.handleRedirectToGame(data);
+        });
 
-// Socket Event für Kartengenerierung
-this.socket.on('map_generated', (data) => {
-    console.log('📥 Map generated:', data);
-    this.handleMapGenerated(data);
-});
+        // Socket Event für Kartengenerierung
+        this.socket.on('map_generated', (data) => {
+        console.log('📥 Map generated:', data);
+        this.handleMapGenerated(data);
+        });
     }
 
     joinGameRoom() {
@@ -296,6 +296,7 @@ this.socket.on('map_generated', (data) => {
 
         const race = this.availableRaces.find(r => r.id === data.raceId);
         this.selectedRace = race;
+		this.selectedRaceId = race.id; 
         
         console.log(`✅ Race selected: ${race.name}`);
         
@@ -350,9 +351,9 @@ confirmRaceSelection() {
     
     // Sende Bestätigung an Server
     this.socket.emit('confirm_race', {
-        gameId: this.gameId,
+        gameId: this.gameDbId, // Verwende gameDbId statt gameId
         playerName: this.playerName,
-        raceId: this.selectedRaceId
+        raceId: this.selectedRace?.id
     });
 
     // Disable Button während der Verarbeitung
@@ -363,23 +364,37 @@ confirmRaceSelection() {
     }
 }
 
-    handleRaceConfirmed(data) {
-        this.setUILoading(false);
+handleRaceConfirmed(data) {
+    console.log('📥 Race confirmed response:', data);
+    
+    if (data.success) {
+        this.raceConfirmed = true;
+        this.showSuccess(`Rasse ${this.selectedRace?.name || 'erfolgreich'} bestätigt!`);
         
-        if (!data.success) {
-            this.showError('Fehler bei der Bestätigung: ' + data.message);
-            return;
+        // UI Updates
+        const confirmBtn = document.getElementById('confirmRaceBtn');
+        if (confirmBtn) {
+            confirmBtn.textContent = 'Rasse bestätigt ✅';
+            confirmBtn.classList.add('confirmed');
         }
-
-        this.isConfirmed = true;
         
-        console.log(`✅ Race confirmed: ${this.selectedRace.name}`);
+        // Verstecke Progress Bar
+        const progressContainer = document.getElementById('progressContainer');
+        if (progressContainer) {
+            progressContainer.style.display = 'none';
+        }
         
-        this.updateSelectionStatus(`Bestätigt: ${this.selectedRace.name}`);
-        this.disableConfirmButton();
-        this.showChangeButton();
-        this.showWaitingArea();
+    } else {
+        this.showError('Fehler beim Bestätigen: ' + (data.message || 'Unbekannter Fehler'));
+        
+        // Button wieder aktivieren
+        const confirmBtn = document.getElementById('confirmRaceBtn');
+        if (confirmBtn) {
+            confirmBtn.disabled = false;
+            confirmBtn.textContent = 'Rasse bestätigen';
+        }
     }
+}
 
     changeRaceSelection() {
         if (!this.isConfirmed) return;
@@ -798,12 +813,89 @@ createProgressContainer() {
     return container;
 }
 
+showNotification(message, type = 'info') {
+    console.log(`Notification (${type}):`, message);
+    
+    // Erstelle oder finde Notification Container
+    let notification = document.getElementById('raceNotification');
+    if (!notification) {
+        notification = this.createNotificationElement();
+    }
+    
+    // Setze Nachricht und Typ
+    notification.textContent = message;
+    notification.className = `race-notification ${type} show`;
+    
+    // Auto-hide nach 4 Sekunden
+    setTimeout(() => {
+        notification.classList.remove('show');
+    }, 4000);
+}
+
+createNotificationElement() {
+    const notification = document.createElement('div');
+    notification.id = 'raceNotification';
+    notification.className = 'race-notification';
+    
+    // CSS für Notifications
+    const style = document.createElement('style');
+    style.textContent = `
+        .race-notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 20px;
+            border-radius: 6px;
+            color: white;
+            font-weight: 600;
+            z-index: 10001;
+            transform: translateX(100%);
+            transition: transform 0.3s ease;
+            min-width: 300px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+        
+        .race-notification.show {
+            transform: translateX(0);
+        }
+        
+        .race-notification.success {
+            background: #28a745;
+        }
+        
+        .race-notification.error {
+            background: #dc3545;
+        }
+        
+        .race-notification.info {
+            background: #17a2b8;
+        }
+        
+        .race-notification.warning {
+            background: #ffc107;
+            color: #212529;
+        }
+    `;
+    
+    document.head.appendChild(style);
+    document.body.appendChild(notification);
+    return notification;
+}
+
 showSuccess(message) {
     this.showNotification(message, 'success');
 }
 
 showError(message) {
     this.showNotification(message, 'error');
+}
+
+showInfo(message) {
+    this.showNotification(message, 'info');
+}
+
+showWarning(message) {
+    this.showNotification(message, 'warning');
 }
 }
 

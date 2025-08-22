@@ -903,7 +903,7 @@ io.on('connection', (socket) => {
 });
 
 // Rasse bestätigen
-    socket.on('confirm_race', async (data) => {
+socket.on('confirm_race', async (data) => {
     try {
         console.log('🎯 Confirm race request:', data);
         
@@ -927,44 +927,13 @@ io.on('connection', (socket) => {
             // Sync an alle Spieler senden
             await broadcastRaceSelectionSync(data.gameId);
             
-            // WICHTIG: Prüfe ob alle Spieler ihre Rassen bestätigt haben
-            const allConfirmed = await mapController.checkAllPlayersRaceConfirmed(data.gameId);
-            
-            if (allConfirmed.allConfirmed) {
-                console.log(`🗺️ All players confirmed races for game ${data.gameId} - starting map generation`);
-                
-                // Starte Kartengenerierung
-                const mapResult = await mapController.generateMap(data.gameId);
-                
-                if (mapResult.success) {
-                    // Benachrichtige alle Spieler über erfolgreiche Kartengenerierung
-                    io.to(`db_game_${data.gameId}`).emit('map_generated', {
-                        success: true,
-                        gameId: data.gameId,
-                        mapSize: mapResult.mapSize,
-                        playerCount: mapResult.playerCount,
-                        message: 'Karte wurde generiert! Das Spiel beginnt.'
-                    });
-                    
-                    // Leite Spieler zur Spielseite weiter
-                    io.to(`db_game_${data.gameId}`).emit('redirect_to_game', {
-                        gameId: data.gameId,
-                        url: `/game.html?gameId=${data.gameId}`
-                    });
-                    
-                } else {
-                    console.error('❌ Map generation failed:', mapResult.message);
-                    io.to(`db_game_${data.gameId}`).emit('error', 'Kartengenerierung fehlgeschlagen: ' + mapResult.message);
-                }
-            }
-            
         } else {
             socket.emit('error', result.message);
         }
         
     } catch (error) {
         console.error('Error confirming race:', error);
-        socket.emit('error', 'Fehler beim Bestätigen der Rasse');
+        socket.emit('error', 'Fehler bei der Rassenbestätigung');
     }
 });
 

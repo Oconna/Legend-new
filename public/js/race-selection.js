@@ -123,10 +123,15 @@ class RaceSelectionClient {
         this.handleRedirectToGame(data);
         });
 
-        // Socket Event für Kartengenerierung
         this.socket.on('map_generated', (data) => {
         console.log('📥 Map generated:', data);
         this.handleMapGenerated(data);
+        });
+    
+        // Ergänze diesen Event-Handler für Errors:
+        this.socket.on('map_generation_error', (data) => {
+        console.error('❌ Map generation error:', data);
+        this.showError('Fehler bei der Kartengenerierung: ' + data.message);
         });
     }
 
@@ -306,16 +311,16 @@ class RaceSelectionClient {
     }
 	
 handleMapGenerated(data) {
-    console.log('Map generation completed:', data);
-    
     if (data.success) {
-        this.showSuccess('Karte wurde erfolgreich generiert! Das Spiel startet...');
+        console.log('🗺️ Map successfully generated! Redirecting to game...');
+        this.updateSelectionStatus('Karte erfolgreich generiert! Spiel startet...');
         
-        // Zeige Fortschrittsanzeige
-        this.showProgress('Spiel wird gestartet...', 95);
-        
+        // Weiterleitung zum Hauptspiel nach kurzer Verzögerung
+        setTimeout(() => {
+            window.location.href = `/game.html?gameId=${data.gameId}&player=${encodeURIComponent(this.playerName)}`;
+        }, 2000);
     } else {
-        this.showError('Kartengenerierung fehlgeschlagen: ' + data.message);
+        this.showError('Fehler bei der Kartengenerierung: ' + data.message);
     }
 }
 

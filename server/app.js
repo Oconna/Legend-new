@@ -968,6 +968,77 @@ io.on('connection', (socket) => {
     }
 });
 
+    socket.on('request_map_generation', async (data) => {
+    try {
+        console.log('🗺️ Map generation request:', data);
+        
+        if (!data.gameId || !data.playerName) {
+            socket.emit('map_generation_error', { message: 'Unvollständige Daten für Kartengenerierung' });
+            return;
+        }
+
+        // Prüfe ob der Spieler berechtigt ist (ist er im Spiel?)
+        const playerCheck = await db.query(
+            'SELECT id FROM game_players WHERE game_id = ? AND player_name = ? AND is_active = 1',
+            [data.gameId, data.playerName]
+        );
+
+        if (playerCheck.length === 0) {
+            socket.emit('map_generation_error', { message: 'Spieler nicht berechtigt' });
+            return;
+        }
+
+        // Prüfe ob wirklich alle Spieler bereit sind
+        const allConfirmed = await mapController.checkAllPlayersRaceConfirmed(data.gameId);
+        
+        if (!allConfirmed.allConfirmed) {
+            socket.emit('map_generation_error', { 
+                message: `Nicht alle Spieler bereit (${allConfirmed.confirmedPlayers}/${allConfirmed.totalPlayers})` 
+            });
+            return;
+        }
+
+        console.log(`🗺️ Starting map generation for game ${data.gameId}...`);
+        
+        // Starte Kartengenerierung
+        const mapResult = await mapController.generateMap(data.gameId);
+        
+        if (mapResult.success) {
+            console.log(`✅ Map generation successful for game ${data.gameId}`);
+            
+            // Benachrichtige ALLE Spieler über erfolgreiche Kartengenerierung
+            io.to(`db_game_${data.gameId}`).emit('map_generated', {
+                success: true,
+                gameId: data.gameId,
+                mapSize: mapResult.mapSize,
+                playerCount: mapResult.playerCount,
+                message: 'Karte wurde erfolgreich generiert!'
+            });
+            
+            // Update game status to playing (falls noch nicht geschehen)
+            await db.query(
+                'UPDATE games SET status = "playing", started_at = NOW() WHERE id = ? AND status != "playing"',
+                [data.gameId]
+            );
+            
+        } else {
+            console.error(`❌ Map generation failed for game ${data.gameId}:`, mapResult.message);
+            
+            // Benachrichtige alle Spieler über Fehler
+            io.to(`db_game_${data.gameId}`).emit('map_generation_error', {
+                success: false,
+                message: mapResult.message || 'Unbekannter Fehler bei der Kartengenerierung'
+            });
+        }
+        
+    } catch (error) {
+        console.error('Error in map generation request:', error);
+        socket.emit('map_generation_error', {
+            message: 'Server-Fehler bei der Kartengenerierung: ' + error.message
+        });
+    }
+});
+
 // Kartendaten abrufen
     socket.on('get_map_data', async (data) => {
     try {

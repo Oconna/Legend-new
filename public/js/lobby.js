@@ -145,6 +145,16 @@ init() {
             this.gameDbId = data.gameDbId;
             this.showRaceSelection();
         });
+		
+		this.socket.on('race_selection_started', (data) => {
+        console.log('🎭 Race selection started:', data);
+        this.handleRaceSelectionStarted(data);
+        });
+
+        this.socket.on('race_selection_redirect', (data) => {
+        console.log('🎭 Race selection redirect:', data);
+        this.redirectToRaceSelection(data);
+        });
 
         this.socket.on('race_selection_update', (data) => {
             console.log('Race selection update:', data);
@@ -1004,7 +1014,7 @@ showGameLobby(data) {
     setTimeout(() => {
         this.joinChatRoom(this.currentGameId);
     }, 500);
-    this.updateStartButton();
+	
     console.log('✅ Game lobby shown with layout manager');
 }
 

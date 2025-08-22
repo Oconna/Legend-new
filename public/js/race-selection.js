@@ -1,4 +1,4 @@
-// Race Selection Client - public/js/race-selection.js
+// Race Selection Client - public/js/race-selection.js (KORRIGIERT)
 class RaceSelectionClient {
     constructor() {
         this.socket = null;
@@ -145,10 +145,28 @@ class RaceSelectionClient {
             backBtn.addEventListener('click', () => this.goBackToLobby());
         }
 
-DetailsModal();
+        // Race Details Modal
+        const modal = document.getElementById('raceDetailsModal');
+        const closeBtn = modal?.querySelector('.close');
+        if (closeBtn) {
+            closeBtn.addEventListener('click', () => this.closeRaceDetailsModal());
+        }
+
+        // Close modal on outside click
+        if (modal) {
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    this.closeRaceDetailsModal();
                 }
             });
         }
+
+        // Keyboard events
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                this.closeRaceDetailsModal();
+            }
+        });
     }
 
     initUI() {

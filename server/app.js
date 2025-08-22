@@ -101,96 +101,76 @@ async function startAutomaticMapGeneration(gameId) {
     try {
         console.log(`🗺️ Starting automatic map generation for game ${gameId}...`);
         
-        // Benachrichtige alle Spieler, dass die Kartengenerierung startet
-        io.to(`db_game_${gameId}`).emit('game_start_ready', {
-            gameId: gameId,
-            message: 'Alle Spieler bereit! Kartengenerierung startet...',
-            status: 'map_generation_starting'
-        });
+        // Doppelte Sicherheitsprüfung: Sind wirklich alle Spieler bereit?
+        const doubleCheck = await gameController.getAllRaceSelections(gameId);
+        if (!doubleCheck.success) {
+            throw new Error('Could not verify player status for map generation');
+        }
         
-        // Kurze Verzögerung für bessere UX
-        setTimeout(async () => {
-            try {
-                // Starte die tatsächliche Kartengenerierung
-                const mapResult = await mapController.generateMap(gameId);
-                
-                if (mapResult.success) {
-                    console.log(`✅ Automatic map generation successful for game ${gameId}`);
-                    
-                    // Benachrichtige ALLE Spieler über erfolgreiche Kartengenerierung
-                    io.to(`db_game_${gameId}`).emit('map_generated', {
-                        success: true,
-                        gameId: gameId,
-                        mapSize: mapResult.mapSize,
-                        playerCount: mapResult.playerCount,
-                        message: 'Karte wurde erfolgreich generiert!'
-                    });
-                    
-                    // Update game status to playing (falls noch nicht geschehen)
-                    await db.query(
-                        'UPDATE games SET status = "playing", started_at = NOW() WHERE id = ? AND status != "playing"',
-                        [gameId]
-                    );
-                    
-                } else {
-                    console.error(`❌ Automatic map generation failed for game ${gameId}:`, mapResult.message);
-                    
-                    // Benachrichtige alle Spieler über Fehler
-                    io.to(`db_game_${gameId}`).emit('map_generation_error', {
-                        success: false,
-                        message: mapResult.message || 'Unbekannter Fehler bei der automatischen Kartengenerierung'
-                    });
-                }
-            } catch (error) {
-                console.error('Error in automatic map generation:', error);
-                io.to(`db_game_${gameId}`).emit('map_generation_error', {
-                    success: false,
-                    message: 'Server-Fehler bei der automatischen Kartengenerierung: ' + error.message
-                });
-            }
-        }, 1500); // 1.5 Sekunden Verzögerung
+        const totalPlayers = doubleCheck.selections.length;
+        const confirmedPlayers = doubleCheck.selections.filter(s => s.race_confirmed === 1).length;
+        
+        if (confirmedPlayers !== totalPlayers) {
+            console.log(`❌ Map generation cancelled - not all players ready (${confirmedPlayers}/${totalPlayers})`);
+            io.to(`db_game_${gameId}`).emit('map_generation_error', {
+                success: false,
+                message: `Kartengenerierung abgebrochen - nicht alle Spieler bereit (${confirmedPlayers}/${totalPlayers})`
+            });
+            return;
+        }
+        
+        console.log(`✅ Double-check passed - all ${totalPlayers} players are ready. Generating map...`);
+        
+        // Starte die tatsächliche Kartengenerierung
+        const mapResult = await mapController.generateMap(gameId);
+        
+        if (mapResult.success) {
+            console.log(`✅ Automatic map generation successful for game ${gameId}`);
+            
+            // Benachrichtige ALLE Spieler über erfolgreiche Kartengenerierung
+            io.to(`db_game_${gameId}`).emit('map_generated', {
+                success: true,
+                gameId: gameId,
+                mapSize: mapResult.mapSize,
+                playerCount: mapResult.playerCount,
+                message: 'Karte wurde erfolgreich generiert!'
+            });
+            
+            // Update game status to playing (falls noch nicht geschehen)
+            await db.query(
+                'UPDATE games SET status = "playing", started_at = NOW() WHERE id = ? AND status != "playing"',
+                [gameId]
+            );
+            
+            console.log(`🎮 Game ${gameId} is now PLAYING!`);
+            
+        } else {
+            console.error(`❌ Automatic map generation FAILED for game ${gameId}:`, mapResult.message);
+            
+            // Benachrichtige alle Spieler über Fehler
+            io.to(`db_game_${gameId}`).emit('map_generation_error', {
+                success: false,
+                message: mapResult.message || 'Unbekannter Fehler bei der automatischen Kartengenerierung'
+            });
+        }
         
     } catch (error) {
-        console.error('Error starting automatic map generation:', error);
+        console.error('ERROR in automatic map generation:', error);
         io.to(`db_game_${gameId}`).emit('map_generation_error', {
             success: false,
-            message: 'Fehler beim Starten der automatischen Kartengenerierung'
+            message: 'Server-Fehler bei der automatischen Kartengenerierung: ' + error.message
         });
-    }
-}
-
-async function checkAllPlayersRaceConfirmed(gameId) {
-    try {
-        const result = await db.query(`
-            SELECT 
-                COUNT(*) as total_players,
-                SUM(CASE WHEN race_id IS NOT NULL AND race_confirmed = 1 THEN 1 ELSE 0 END) as confirmed_players
-            FROM game_players 
-            WHERE game_id = ? AND is_active = 1
-        `, [gameId]);
-
-        const { total_players, confirmed_players } = result[0];
-        
-        return {
-            allConfirmed: total_players > 0 && confirmed_players === total_players,
-            totalPlayers: total_players,
-            confirmedPlayers: confirmed_players
-        };
-
-    } catch (error) {
-        console.error('Error checking race confirmations:', error);
-        return { allConfirmed: false, totalPlayers: 0, confirmedPlayers: 0 };
     }
 }
 
 async function broadcastRaceSelectionSync(gameId) {
     try {
-        console.log(`📊 Broadcasting race selection sync for game ${gameId}`);
+        console.log(`📊 Enhanced race selection sync for game ${gameId}`);
         
         // 1. Hole alle aktuellen Rassenauswahlen
         const result = await gameController.getAllRaceSelections(gameId);
         if (!result.success) {
-            console.error('Could not get race selections for sync');
+            console.error('Could not get race selections for sync:', result.message);
             return;
         }
 
@@ -201,18 +181,38 @@ async function broadcastRaceSelectionSync(gameId) {
             timestamp: new Date().toISOString()
         });
         
-        console.log(`✓ Race selection sync broadcasted for game ${gameId}`);
+        console.log(`✓ Race selection sync broadcasted for game ${gameId} (${result.selections.length} players)`);
 
-        // 3. NEUE LOGIK: Prüfe ob alle Spieler bereit sind
-        const allReady = await checkAllPlayersRaceConfirmed(gameId);
+        // 3. NEUE KRITISCHE LOGIK: Prüfe ob alle Spieler bereit sind
+        const totalPlayers = result.selections.length;
+        const confirmedPlayers = result.selections.filter(s => s.race_confirmed === 1).length;
         
-        if (allReady.allConfirmed && allReady.totalPlayers > 0) {
-            console.log(`🎉 All ${allReady.totalPlayers} players confirmed races for game ${gameId} - Starting automatic map generation!`);
+        console.log(`🔍 Game ${gameId}: ${confirmedPlayers}/${totalPlayers} players confirmed races`);
+        
+        // Debug: Zeige Spielerstatus
+        result.selections.forEach(player => {
+            console.log(`  - ${player.player_name}: Race ${player.race_name || 'none'} (${player.race_confirmed ? 'CONFIRMED' : 'not confirmed'})`);
+        });
+        
+        if (totalPlayers > 0 && confirmedPlayers === totalPlayers) {
+            console.log(`🎉 ALL ${totalPlayers} PLAYERS READY for game ${gameId} - Starting automatic map generation!`);
             
-            // 4. Automatisch Kartengenerierung starten
-            await startAutomaticMapGeneration(gameId);
+            // 4. Benachrichtige alle Spieler, dass alle bereit sind
+            io.to(`db_game_${gameId}`).emit('game_start_ready', {
+                gameId: gameId,
+                message: 'Alle Spieler bereit! Kartengenerierung startet...',
+                status: 'map_generation_starting',
+                confirmedPlayers: confirmedPlayers,
+                totalPlayers: totalPlayers
+            });
+            
+            // 5. Starte automatische Kartengenerierung nach kurzer Verzögerung
+            setTimeout(async () => {
+                await startAutomaticMapGeneration(gameId);
+            }, 2000); // 2 Sekunden Verzögerung für bessere UX
+            
         } else {
-            console.log(`⏳ Game ${gameId}: ${allReady.confirmedPlayers}/${allReady.totalPlayers} players ready`);
+            console.log(`⏳ Game ${gameId}: Still waiting - ${confirmedPlayers}/${totalPlayers} players ready`);
         }
         
     } catch (error) {

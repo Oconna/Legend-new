@@ -8,6 +8,7 @@ class StrategyGameClient {
         this.playerName = '';
         this.availableRaces = [];
         this.currentPlayers = [];
+		this.lobbyPlayers = [];
         this.isReady = false;
         this.isHost = false;
         this.selectedRace = null;
@@ -335,6 +336,7 @@ redirectToRaceSelection(data) {
 }
 
 // Host kann Spiel starten (Rassenauswahl beginnen)
+// Host kann Spiel starten (Rassenauswahl beginnen)
 startRaceSelection() {
     if (!this.currentGameId || !this.isHost) {
         console.warn('Cannot start race selection: not host or no game');
@@ -342,8 +344,8 @@ startRaceSelection() {
         return;
     }
 
-    // Prüfe ob genügend Spieler bereit sind
-    const readyPlayers = this.lobbyPlayers?.filter(p => p.ready).length || 0;
+    // KORRIGIERTE Zeilen:
+    const readyPlayers = this.lobbyPlayers?.filter(p => p.ready || p.isReady).length || 0;
     const totalPlayers = this.lobbyPlayers?.length || 0;
 
     if (readyPlayers < 2) {
@@ -408,9 +410,11 @@ updateStartButton() {
         if (startBtn) {
             startBtn.style.display = 'inline-block';
             
-            // Button-Status basierend auf Bereitschaft aktualisieren
-            const readyPlayers = this.lobbyPlayers?.filter(p => p.ready).length || 0;
+            // KORRIGIERTE Zeilen - jetzt mit korrekten Property-Namen:
+            const readyPlayers = this.lobbyPlayers?.filter(p => p.ready || p.isReady).length || 0;
             const totalPlayers = this.lobbyPlayers?.length || 0;
+            
+            console.log(`🔍 Debug - Ready: ${readyPlayers}/${totalPlayers}, Players:`, this.lobbyPlayers);
             
             if (readyPlayers >= 2) {
                 startBtn.disabled = false;
@@ -1280,46 +1284,49 @@ onDefaultLayoutActivated() {
         });
     }
 
-    // VERBESSERTE updateGamePlayersList Methode mit besserer Fehlerbehandlung
-    updateGamePlayersList(players) {
-        const playersList = document.getElementById('gameLobbyPlayersList');
-        if (!playersList) {
-            console.warn('gameLobbyPlayersList element not found');
-            return;
-        }
-        
-        playersList.innerHTML = '';
-        
-        if (!players || !Array.isArray(players)) {
-            console.warn('Invalid players data:', players);
-            return;
-        }
-        
-        players.forEach(player => {
-            const playerItem = document.createElement('div');
-            playerItem.className = 'player-item';
-            
-            if (player.ready || player.isReady) {
-                playerItem.classList.add('ready');
-            }
-            
-            if (player.isHost) {
-                playerItem.classList.add('host');
-            }
-            
-            playerItem.innerHTML = `
-                <span class="player-name">${this.escapeHtml(player.name)}</span>
-                <span class="player-status">
-                    ${player.isHost ? '👑 ' : ''}
-                    ${(player.ready || player.isReady) ? '✅ Bereit' : '⏳ Wartet'}
-                </span>
-            `;
-            
-            playersList.appendChild(playerItem);
-        });
-        
-        console.log(`Updated player list: ${players.length} players`);
+// VERBESSERTE updateGamePlayersList Methode mit besserer Fehlerbehandlung
+updateGamePlayersList(players) {
+    const playersList = document.getElementById('gameLobbyPlayersList');
+    if (!playersList) {
+        console.warn('gameLobbyPlayersList element not found');
+        return;
     }
+    
+    playersList.innerHTML = '';
+    
+    if (!players || !Array.isArray(players)) {
+        console.warn('Invalid players data:', players);
+        return;
+    }
+    
+    // NEUE Zeile: Spieler-Array in Property speichern
+    this.lobbyPlayers = players;
+    
+    players.forEach(player => {
+        const playerItem = document.createElement('div');
+        playerItem.className = 'player-item';
+        
+        if (player.ready || player.isReady) {
+            playerItem.classList.add('ready');
+        }
+        
+        if (player.isHost) {
+            playerItem.classList.add('host');
+        }
+        
+        playerItem.innerHTML = `
+            <span class="player-name">${this.escapeHtml(player.name)}</span>
+            <span class="player-status">
+                ${player.isHost ? '👑 ' : ''}
+                ${(player.ready || player.isReady) ? '✅ Bereit' : '⏳ Wartet'}
+            </span>
+        `;
+        
+        playersList.appendChild(playerItem);
+    });
+    
+    console.log(`Updated player list: ${players.length} players`);
+}
 
     // NEUE Methode: Game Info aktualisieren
     updateGameInfo(data) {

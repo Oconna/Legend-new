@@ -116,6 +116,18 @@ class RaceSelectionClient {
             console.error('❌ Socket error:', error);
             this.showError(error);
         });
+		
+		// Socket Event für Spielweiterleitung
+this.socket.on('redirect_to_game', (data) => {
+    console.log('📥 Redirect to game:', data);
+    this.handleRedirectToGame(data);
+});
+
+// Socket Event für Kartengenerierung
+this.socket.on('map_generated', (data) => {
+    console.log('📥 Map generated:', data);
+    this.handleMapGenerated(data);
+});
     }
 
     joinGameRoom() {
@@ -291,21 +303,65 @@ class RaceSelectionClient {
         this.updateSelectionStatus(`Rasse gewählt: ${race.name}`);
         this.enableConfirmButton();
     }
-
-    confirmRaceSelection() {
-        if (!this.selectedRace || this.isConfirmed) return;
-
-        console.log(`📤 Confirming race: ${this.selectedRace.name}`);
+	
+handleMapGenerated(data) {
+    console.log('Map generation completed:', data);
+    
+    if (data.success) {
+        this.showSuccess('Karte wurde erfolgreich generiert! Das Spiel startet...');
         
-        this.socket.emit('confirm_race', {
-            gameId: this.gameDbId,
-            playerName: this.playerName,
-            raceId: this.selectedRace.id
-        });
-
-        this.updateSelectionStatus('Bestätigung wird verarbeitet...');
-        this.setUILoading(true);
+        // Zeige Fortschrittsanzeige
+        this.showProgress('Spiel wird gestartet...', 95);
+        
+    } else {
+        this.showError('Kartengenerierung fehlgeschlagen: ' + data.message);
     }
+}
+
+handleRedirectToGame(data) {
+    console.log('Redirecting to game:', data);
+    
+    this.showSuccess('Karte generiert! Weiterleitung zum Spiel...');
+    this.showProgress('Lade Spiel...', 100);
+    
+    // Kurze Verzögerung für bessere UX
+    setTimeout(() => {
+        const gameUrl = `/game.html?gameId=${data.gameId}&playerName=${encodeURIComponent(this.playerName)}`;
+        console.log('Redirecting to:', gameUrl);
+        window.location.href = gameUrl;
+    }, 2000);
+}
+
+confirmRaceSelection() {
+    if (!this.selectedRaceId) {
+        this.showError('Bitte wähle zuerst eine Rasse aus');
+        return;
+    }
+
+    if (this.raceConfirmed) {
+        this.showError('Du hast bereits eine Rasse bestätigt');
+        return;
+    }
+
+    console.log('🎯 Confirming race selection:', this.selectedRaceId);
+
+    // UI Update: Zeige Bestätigungsstatus
+    this.showProgress('Rasse wird bestätigt...', 60);
+    
+    // Sende Bestätigung an Server
+    this.socket.emit('confirm_race', {
+        gameId: this.gameId,
+        playerName: this.playerName,
+        raceId: this.selectedRaceId
+    });
+
+    // Disable Button während der Verarbeitung
+    const confirmBtn = document.getElementById('confirmRaceBtn');
+    if (confirmBtn) {
+        confirmBtn.disabled = true;
+        confirmBtn.textContent = 'Wird bestätigt...';
+    }
+}
 
     handleRaceConfirmed(data) {
         this.setUILoading(false);
@@ -659,6 +715,96 @@ class RaceSelectionClient {
         console.log('📜 Chat history received:', data);
         // Chat-Historie laden...
     }
+	
+	showProgress(message, percentage) {
+    // Zeige Fortschrittsanzeige
+    const progressContainer = document.getElementById('progressContainer') || this.createProgressContainer();
+    const progressBar = progressContainer.querySelector('.progress-bar');
+    const progressText = progressContainer.querySelector('.progress-text');
+    
+    if (progressBar) {
+        progressBar.style.width = percentage + '%';
+    }
+    
+    if (progressText) {
+        progressText.textContent = message;
+    }
+    
+    progressContainer.style.display = 'block';
+}
+
+createProgressContainer() {
+    const container = document.createElement('div');
+    container.id = 'progressContainer';
+    container.className = 'progress-container';
+    container.innerHTML = `
+        <div class="progress-wrapper">
+            <div class="progress-text">Vorbereitung...</div>
+            <div class="progress-track">
+                <div class="progress-bar"></div>
+            </div>
+        </div>
+    `;
+    
+    // CSS für Progress Bar
+    const style = document.createElement('style');
+    style.textContent = `
+        .progress-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+            color: white;
+        }
+        
+        .progress-wrapper {
+            text-align: center;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 30px;
+            border-radius: 10px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .progress-text {
+            font-size: 18px;
+            margin-bottom: 20px;
+            font-weight: 600;
+        }
+        
+        .progress-track {
+            width: 300px;
+            height: 6px;
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            width: 0%;
+            transition: width 0.5s ease;
+        }
+    `;
+    
+    document.head.appendChild(style);
+    document.body.appendChild(container);
+    return container;
+}
+
+showSuccess(message) {
+    this.showNotification(message, 'success');
+}
+
+showError(message) {
+    this.showNotification(message, 'error');
+}
 }
 
 // Client initialisieren

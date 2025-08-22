@@ -10,6 +10,7 @@ const improvedLobbyManager = require('./controllers/improvedLobbyManager');
 const gameController = require('./controllers/gameController');
 const raceController = require('./controllers/raceController');
 const db = require('./config/database');
+const mapController = require('./controllers/mapController');
 
 // Express App Setup
 const app = express();
@@ -904,45 +905,56 @@ socket.on('select_race', async (data) => {
 // Rasse bestätigen
 socket.on('confirm_race', async (data) => {
     try {
-        console.log('✅ Confirm race request:', data);
+        console.log('🎯 Confirm race request:', data);
         
         if (!data.gameId || !data.playerName || !data.raceId) {
             socket.emit('error', 'Unvollständige Daten für Rassenbestätigung');
             return;
         }
 
-        const result = await raceController.confirmRace(data.gameId, data.playerName, data.raceId);
+        const result = await raceController.confirmRaceSelection(data.gameId, data.playerName, data.raceId);
         
         if (result.success) {
             socket.emit('race_confirmed', {
                 success: true,
+                gameId: data.gameId,
                 playerName: data.playerName,
-                raceId: data.raceId,
-                allReady: result.allReady
+                raceId: data.raceId
             });
             
-            console.log(`✅ Race confirmed by ${data.playerName} (${result.readyCount}/${result.totalCount} ready)`);
+            console.log(`✅ Race confirmed for ${data.playerName}: ${data.raceId}`);
             
             // Sync an alle Spieler senden
             await broadcastRaceSelectionSync(data.gameId);
             
-            // Wenn alle Spieler bereit sind, starte das Spiel
-            if (result.allReady) {
-                console.log('🚀 All players ready - starting game...');
+            // WICHTIG: Prüfe ob alle Spieler ihre Rassen bestätigt haben
+            const allConfirmed = await mapController.checkAllPlayersRaceConfirmed(data.gameId);
+            
+            if (allConfirmed.allConfirmed) {
+                console.log(`🗺️ All players confirmed races for game ${data.gameId} - starting map generation`);
                 
-                const gameStartResult = await raceController.startGame(data.gameId);
+                // Starte Kartengenerierung
+                const mapResult = await mapController.generateMap(data.gameId);
                 
-                if (gameStartResult.success) {
-                    // Benachrichtige alle Spieler, dass das Spiel startet
-                    io.to(`db_game_${data.gameId}`).emit('game_start_ready', {
+                if (mapResult.success) {
+                    // Benachrichtige alle Spieler über erfolgreiche Kartengenerierung
+                    io.to(`db_game_${data.gameId}`).emit('map_generated', {
+                        success: true,
                         gameId: data.gameId,
-                        message: 'Alle Spieler bereit! Spiel startet...'
+                        mapSize: mapResult.mapSize,
+                        playerCount: mapResult.playerCount,
+                        message: 'Karte wurde generiert! Das Spiel beginnt.'
                     });
                     
-                    console.log(`✅ Game ${data.gameId} started successfully`);
+                    // Leite Spieler zur Spielseite weiter
+                    io.to(`db_game_${data.gameId}`).emit('redirect_to_game', {
+                        gameId: data.gameId,
+                        url: `/game.html?gameId=${data.gameId}`
+                    });
+                    
                 } else {
-                    console.error('Failed to start game:', gameStartResult.message);
-                    io.to(`db_game_${data.gameId}`).emit('error', 'Fehler beim Starten des Spiels: ' + gameStartResult.message);
+                    console.error('❌ Map generation failed:', mapResult.message);
+                    io.to(`db_game_${data.gameId}`).emit('error', 'Kartengenerierung fehlgeschlagen: ' + mapResult.message);
                 }
             }
             
@@ -952,7 +964,38 @@ socket.on('confirm_race', async (data) => {
         
     } catch (error) {
         console.error('Error confirming race:', error);
-        socket.emit('error', 'Fehler bei der Rassenbestätigung');
+        socket.emit('error', 'Fehler beim Bestätigen der Rasse');
+    }
+});
+
+// Kartendaten abrufen
+socket.on('get_map_data', async (data) => {
+    try {
+        console.log('📋 Get map data request:', data);
+        
+        if (!data.gameId) {
+            socket.emit('error', 'Spiel-ID fehlt');
+            return;
+        }
+
+        const result = await mapController.getMapData(data.gameId);
+        
+        if (result.success) {
+            socket.emit('map_data', {
+                success: true,
+                gameId: data.gameId,
+                mapData: result.mapData
+            });
+            
+            console.log(`✅ Map data sent for game ${data.gameId}: ${result.mapData.length} tiles`);
+            
+        } else {
+            socket.emit('error', result.message);
+        }
+        
+    } catch (error) {
+        console.error('Error getting map data:', error);
+        socket.emit('error', 'Fehler beim Laden der Kartendaten');
     }
 });
 
@@ -1094,19 +1137,35 @@ async function broadcastRaceSelectionSync(gameId) {
         }
     });
 
-    socket.on('get_game_state', async (data) => {
-        try {
-            const gameState = await gameController.getGameState(data.gameId);
-            if (gameState) {
-                socket.emit('game_state', gameState);
-            } else {
-                socket.emit('error', 'Spielstatus nicht gefunden');
-            }
-        } catch (error) {
-            console.error('Error in get_game_state:', error);
-            socket.emit('error', 'Fehler beim Laden des Spielstatus: ' + error.message);
+socket.on('get_game_state', async (data) => {
+    try {
+        console.log('📋 Get game state request:', data);
+        
+        if (!data.gameId) {
+            socket.emit('error', 'Spiel-ID fehlt');
+            return;
         }
-    });
+
+        const gameState = await gameController.getGameState(data.gameId);
+        
+        if (gameState) {
+            socket.emit('game_state', {
+                success: true,
+                gameId: data.gameId,
+                gameState: gameState
+            });
+            
+            console.log(`✅ Game state sent for game ${data.gameId}`);
+            
+        } else {
+            socket.emit('error', 'Spielzustand nicht gefunden');
+        }
+        
+    } catch (error) {
+        console.error('Error getting game state:', error);
+        socket.emit('error', 'Fehler beim Laden des Spielzustands: ' + error.message);
+    }
+});
 
     // Reconnection and sync events
     socket.on('rejoin_db_game_room', async (data) => {
@@ -1150,16 +1209,35 @@ async function broadcastRaceSelectionSync(gameId) {
         }
     });
 
-    socket.on('end_turn', async (data) => {
-        try {
-            console.log('End turn:', data);
-            // TODO: Implement end turn logic
-            socket.emit('info', 'Zug-Ende noch nicht implementiert');
-        } catch (error) {
-            console.error('Error in end_turn:', error);
-            socket.emit('error', 'Fehler beim Beenden des Zuges');
+socket.on('end_turn', async (data) => {
+    try {
+        console.log('🔄 End turn request:', data);
+        
+        if (!data.gameId || !data.playerId) {
+            socket.emit('error', 'Unvollständige Daten für Zug beenden');
+            return;
         }
-    });
+
+        // TODO: Hier wird später die Zug-Logik implementiert
+        // Momentan nur ein Platzhalter
+        
+        socket.emit('turn_ended', {
+            success: true,
+            gameId: data.gameId,
+            nextPlayerId: data.playerId // Vorläufig
+        });
+        
+        // Benachrichtige alle Spieler über Zugwechsel
+        io.to(`db_game_${data.gameId}`).emit('turn_changed', {
+            gameId: data.gameId,
+            currentPlayerId: data.playerId,
+            message: 'Nächster Spieler ist am Zug'
+        });
+        
+    } catch (error) {
+        console.error('Error ending turn:', error);
+        socket.emit('error', 'Fehler beim Beenden des Zugs');
+    }
 });
 
 // Cleanup old chat rooms (läuft alle 30 Minuten)

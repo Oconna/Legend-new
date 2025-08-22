@@ -297,7 +297,7 @@ io.on('connection', (socket) => {
         }
     });
 
-socket.on('join_game', (data) => {
+    socket.on('join_game', (data) => {
     try {
         console.log('Join game request:', data);
         const result = improvedLobbyManager.joinGame(socket.id, data.playerName, data.gameId);
@@ -334,7 +334,7 @@ socket.on('join_game', (data) => {
     }
 });
 
-socket.on('player_ready', (data) => {
+    socket.on('player_ready', (data) => {
     try {
         const result = improvedLobbyManager.setPlayerReady(socket.id, data.ready);
         
@@ -363,7 +363,7 @@ socket.on('player_ready', (data) => {
     }
 });
 
-socket.on('leave_game', (data) => {
+    socket.on('leave_game', (data) => {
     try {
         console.log('🚪 Leave game request:', data);
         const playerData = improvedLobbyManager.players.get(socket.id);
@@ -446,7 +446,7 @@ socket.on('leave_game', (data) => {
 });
 
 // WICHTIG: Auch bei disconnect die Updates senden
-socket.on('disconnect', () => {
+    socket.on('disconnect', () => {
     try {
         console.log(`🔌 Socket ${socket.id} disconnected`);
         
@@ -551,7 +551,7 @@ socket.on('disconnect', () => {
     }
 });
 
-socket.on('start_game', async (data) => {
+    socket.on('start_game', async (data) => {
     try {
         console.log('🚀 Start game request (Race Selection):', data);
         
@@ -733,7 +733,7 @@ socket.on('start_game', async (data) => {
         }
     });
 
-socket.on('leave_chat_room', (data) => {
+    socket.on('leave_chat_room', (data) => {
     try {
         console.log(`🚪 Player ${data.playerName} leaving chat room for game ${data.gameId}`);
         
@@ -789,7 +789,7 @@ socket.on('leave_chat_room', (data) => {
         }
     });
 
-socket.on('join_race_selection', async (data) => {
+    socket.on('join_race_selection', async (data) => {
     try {
         console.log('🎭 Join race selection request:', data);
         
@@ -832,7 +832,7 @@ socket.on('join_race_selection', async (data) => {
 });
 
 // Verfügbare Rassen laden
-socket.on('get_available_races', async (data) => {
+    socket.on('get_available_races', async (data) => {
     try {
         console.log('📋 Get available races request:', data);
         
@@ -868,7 +868,7 @@ socket.on('get_available_races', async (data) => {
 });
 
 // Rasse auswählen (noch nicht bestätigt)
-socket.on('select_race', async (data) => {
+    socket.on('select_race', async (data) => {
     try {
         console.log('🎯 Select race request:', data);
         
@@ -903,7 +903,7 @@ socket.on('select_race', async (data) => {
 });
 
 // Rasse bestätigen
-socket.on('confirm_race', async (data) => {
+    socket.on('confirm_race', async (data) => {
     try {
         console.log('🎯 Confirm race request:', data);
         
@@ -969,7 +969,7 @@ socket.on('confirm_race', async (data) => {
 });
 
 // Kartendaten abrufen
-socket.on('get_map_data', async (data) => {
+    socket.on('get_map_data', async (data) => {
     try {
         console.log('📋 Get map data request:', data);
         
@@ -1000,7 +1000,7 @@ socket.on('get_map_data', async (data) => {
 });
 
 // Rasse abwählen (um sie zu ändern)
-socket.on('deselect_race', async (data) => {
+    socket.on('deselect_race', async (data) => {
     try {
         console.log('❌ Deselect race request:', data);
         
@@ -1034,7 +1034,7 @@ socket.on('deselect_race', async (data) => {
 });
 
 // Rassendetails laden
-socket.on('get_race_details', async (data) => {
+    socket.on('get_race_details', async (data) => {
     try {
         console.log('📖 Get race details request:', data);
         
@@ -1065,7 +1065,7 @@ socket.on('get_race_details', async (data) => {
 });
 
 // Rassenauswahl verlassen
-socket.on('leave_race_selection', async (data) => {
+    socket.on('leave_race_selection', async (data) => {
     try {
         console.log('🚪 Leave race selection request:', data);
         
@@ -1104,23 +1104,6 @@ socket.on('leave_race_selection', async (data) => {
     }
 });
 
-// Hilfsfunktion: Race Selection Sync an alle Spieler senden
-async function broadcastRaceSelectionSync(gameId) {
-    try {
-        const result = await raceController.getAllRaceSelections(gameId);
-        if (result.success) {
-            io.to(`db_game_${gameId}`).emit('race_selection_sync', {
-                gameId: gameId,
-                selections: result.selections,
-                timestamp: new Date().toISOString()
-            });
-            console.log(`✓ Race selection sync broadcasted for game ${gameId}`);
-        }
-    } catch (error) {
-        console.error('Error broadcasting race selection sync:', error);
-    }
-}
-
     // Game State Events (for active games)
     socket.on('join_db_game_room', (data) => {
         try {
@@ -1137,7 +1120,7 @@ async function broadcastRaceSelectionSync(gameId) {
         }
     });
 
-socket.on('get_game_state', async (data) => {
+    socket.on('get_game_state', async (data) => {
     try {
         console.log('📋 Get game state request:', data);
         
@@ -1209,7 +1192,7 @@ socket.on('get_game_state', async (data) => {
         }
     });
 
-socket.on('end_turn', async (data) => {
+    socket.on('end_turn', async (data) => {
     try {
         console.log('🔄 End turn request:', data);
         
@@ -1238,6 +1221,7 @@ socket.on('end_turn', async (data) => {
         console.error('Error ending turn:', error);
         socket.emit('error', 'Fehler beim Beenden des Zugs');
     }
+    });
 });
 
 // Cleanup old chat rooms (läuft alle 30 Minuten)

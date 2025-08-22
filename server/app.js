@@ -8,6 +8,7 @@ require('dotenv').config();
 // Import controller modules
 const improvedLobbyManager = require('./controllers/improvedLobbyManager');
 const gameController = require('./controllers/gameController');
+const raceController = require('./controllers/raceController');
 const db = require('./config/database');
 
 // Express App Setup
@@ -549,66 +550,93 @@ socket.on('disconnect', () => {
     }
 });
 
-    socket.on('start_game', async (data) => {
-        try {
-            console.log('Start game request:', data);
-            const result = improvedLobbyManager.startGame(socket.id);
-            
-            if (result.success) {
-                // Create database game
-                const dbGameResult = await gameController.createGame(
-                    result.gameName,
-                    result.players,
-                    result.mapSize
-                );
-                
-                if (dbGameResult.success) {
-                    const dbGameId = dbGameResult.gameId;
-                    
-                    // Move all players to database game room
-                    result.players.forEach(player => {
-                        const playerSocket = [...io.sockets.sockets.values()]
-                            .find(s => s.id === player.socketId);
-                        
-                        if (playerSocket) {
-                            playerSocket.leave(`game_${result.gameId}`);
-                            playerSocket.join(`db_game_${dbGameId}`);
-                        }
-                    });
-                    
-                    // Add to tracking
-                    const playerSocketIds = result.players.map(p => p.socketId);
-                    dbGamePlayers.set(dbGameId, new Set(playerSocketIds));
-                    
-                    // Notify all players about database game creation
-                    io.to(`db_game_${dbGameId}`).emit('db_game_created', {
-                        dbGameId: dbGameId,
-                        players: result.players,
-                        mapSize: result.mapSize
-                    });
-                    
-                    // Start race selection
-                    io.to(`db_game_${dbGameId}`).emit('start_race_selection', {
-                        dbGameId: dbGameId,
-                        players: result.players,
-                        message: 'Spiel wurde erstellt! Wähle deine Rasse.'
-                    });
-                    
-                    console.log(`Database game created with ID: ${dbGameId}`);
-                    
-                    // Update games list (memory game is now removed)
-                    io.emit('games_updated', improvedLobbyManager.getAvailableGames());
-                } else {
-                    socket.emit('error', 'Fehler beim Erstellen der Spieldatenbank: ' + dbGameResult.message);
-                }
-            } else {
-                socket.emit('error', result.message);
-            }
-        } catch (error) {
-            console.error('Error in start_game:', error);
-            socket.emit('error', 'Fehler beim Starten des Spiels: ' + error.message);
+socket.on('start_game', async (data) => {
+    try {
+        console.log('🚀 Start game request (Race Selection):', data);
+        
+        if (!data.gameId || !data.playerName) {
+            socket.emit('error', 'Unvollständige Daten zum Starten des Spiels');
+            return;
         }
-    });
+
+        // Prüfe ob der Spieler Host ist
+        const playerData = improvedLobbyManager.players.get(socket.id);
+        if (!playerData) {
+            socket.emit('error', 'Spieler nicht gefunden');
+            return;
+        }
+
+        const game = improvedLobbyManager.games.get(playerData.gameId);
+        if (!game) {
+            socket.emit('error', 'Spiel nicht gefunden');
+            return;
+        }
+
+        // Prüfe Host-Berechtigung
+        if (game.host !== socket.id) {
+            socket.emit('error', 'Nur der Host kann das Spiel starten');
+            return;
+        }
+
+        // Prüfe Mindestanzahl Spieler
+        if (game.players.length < 2) {
+            socket.emit('error', 'Mindestens 2 Spieler benötigt');
+            return;
+        }
+
+        console.log(`🎮 Host ${data.playerName} starting game ${data.gameId} with ${game.players.length} players`);
+
+        // SCHRITT 1: Spiel in Datenbank erstellen
+        const dbGameResult = await gameController.createGameInDatabase({
+            name: game.name,
+            maxPlayers: game.maxPlayers,
+            mapSize: game.mapSize,
+            players: game.players,
+            status: 'race_selection' // WICHTIG: Status auf race_selection setzen
+        });
+
+        if (dbGameResult.success) {
+            const dbGameId = dbGameResult.gameId;
+            
+            console.log(`✅ Database game created with ID: ${dbGameId} - Status: race_selection`);
+            
+            // SCHRITT 2: Alle Spieler zur Rassenauswahl weiterleiten
+            io.to(`game_${playerData.gameId}`).emit('race_selection_started', {
+                success: true,
+                gameId: dbGameId,
+                memoryGameId: playerData.gameId,
+                message: 'Rassenauswahl startet! Wähle deine Rasse.'
+            });
+            
+            // SCHRITT 3: Memory-Spiel entfernen (da es jetzt in der DB ist)
+            setTimeout(() => {
+                console.log(`🗑️ Removing memory game ${playerData.gameId} after successful DB creation`);
+                
+                // Alle Spieler aus Memory-Spiel entfernen
+                const playersToRemove = [...game.players];
+                playersToRemove.forEach(player => {
+                    const socketId = Object.keys(improvedLobbyManager.players.data || {})
+                        .find(id => improvedLobbyManager.players.get(id)?.name === player.name);
+                    if (socketId) {
+                        improvedLobbyManager.leaveGame(socketId);
+                    }
+                });
+                
+                // Spiele-Liste aktualisieren
+                io.emit('games_updated', improvedLobbyManager.getAvailableGames());
+                
+            }, 2000); // 2 Sekunden Verzögerung für bessere UX
+            
+        } else {
+            console.error('❌ Failed to create database game:', dbGameResult.message);
+            socket.emit('error', 'Fehler beim Erstellen der Spieldatenbank: ' + dbGameResult.message);
+        }
+        
+    } catch (error) {
+        console.error('❌ Error in start_game (race selection):', error);
+        socket.emit('error', 'Fehler beim Starten des Spiels: ' + error.message);
+    }
+});
 
     // Chat Events
     socket.on('join_chat_room', (data) => {
@@ -760,80 +788,295 @@ socket.on('leave_chat_room', (data) => {
         }
     });
 
-    // Race Selection Events (Database-based)
-    socket.on('get_available_races', async (data) => {
-        try {
-            const races = await gameController.getAvailableRaces();
-            if (races.success) {
-                socket.emit('available_races', races.races);
-            } else {
-                socket.emit('error', 'Fehler beim Laden der Rassen');
-            }
-        } catch (error) {
-            console.error('Error getting available races:', error);
-            socket.emit('error', 'Fehler beim Laden der Rassen');
+socket.on('join_race_selection', async (data) => {
+    try {
+        console.log('🎭 Join race selection request:', data);
+        
+        if (!data.gameId || !data.playerName) {
+            socket.emit('error', 'Unvollständige Daten für Rassenauswahl-Beitritt');
+            return;
         }
-    });
 
-    socket.on('select_race', async (data) => {
-        try {
-            console.log(`Race selection by ${data.playerName}: ${data.raceId} for game ${data.gameId}`);
+        const result = await raceController.joinRaceSelection(data.gameId, data.playerName, socket.id);
+        
+        if (result.success) {
+            // Socket dem Spiel-Raum hinzufügen
+            socket.join(`db_game_${data.gameId}`);
             
-            const result = await gameController.selectRace(data.gameId, data.playerName, data.raceId);
-            if (result.success) {
-                socket.emit('race_selected', {
-                    raceId: data.raceId,
-                    message: 'Rasse ausgewählt'
-                });
-
-                // Broadcast updated race selection sync
-                await broadcastRaceSelectionSync(data.gameId);
-            } else {
-                socket.emit('error', result.message);
-            }
-        } catch (error) {
-            console.error('Error in select_race:', error);
-            socket.emit('error', 'Fehler bei der Rassenwahl');
-        }
-    });
-
-    socket.on('deselect_race', async (data) => {
-        try {
-            console.log(`Race deselection by ${data.playerName} for game ${data.gameId}`);
+            // Spieler-Info in Socket speichern
+            socket.raceGameId = data.gameId;
+            socket.racePlayerName = data.playerName;
             
-            const result = await gameController.getAllRaceSelections(data.gameId);
-            if (result.success) {
-                socket.emit('race_deselection_confirmed', {
-                    message: 'Rassenauswahl zurückgesetzt'
-                });
-
-                // Broadcast updated race selection sync
-                await broadcastRaceSelectionSync(data.gameId);
-            } else {
-                socket.emit('error', result.message);
-            }
-        } catch (error) {
-            console.error('Error in deselect_race:', error);
-            socket.emit('error', 'Fehler bei der Rassenabwahl');
+            console.log(`✅ Player ${data.playerName} joined race selection for game ${data.gameId}`);
+            
+            // Bestätigung an Spieler senden
+            socket.emit('race_selection_joined', {
+                success: true,
+                gameId: data.gameId,
+                playerName: data.playerName,
+                totalPlayers: result.totalPlayers
+            });
+            
+            // Verfügbare Rassen automatisch laden
+            socket.emit('get_available_races', { gameId: data.gameId });
+            
+        } else {
+            socket.emit('error', result.message);
         }
-    });
+        
+    } catch (error) {
+        console.error('Error in join_race_selection:', error);
+        socket.emit('error', 'Fehler beim Beitreten der Rassenauswahl');
+    }
+});
 
-    socket.on('get_race_selections', async (data) => {
-        try {
-            const result = await gameController.getAllRaceSelections(data.gameId);
-            if (result.success) {
-                socket.emit('race_selections_list', {
-                    gameId: data.gameId,
-                    selections: result.selections
-                });
-            } else {
-                socket.emit('error', result.message);
-            }
-        } catch (error) {
-            console.error('Error getting race selections:', error);
-            socket.emit('error', 'Fehler beim Abrufen der Rassenwahlen');
+// Verfügbare Rassen laden
+socket.on('get_available_races', async (data) => {
+    try {
+        console.log('📋 Get available races request:', data);
+        
+        const racesResult = await raceController.getAvailableRaces();
+        
+        if (racesResult.success) {
+            // Aktuelle Spieleranzahl ermitteln
+            const playersResult = await db.query(
+                'SELECT COUNT(*) as count FROM game_players WHERE game_id = ? AND is_active = 1',
+                [data.gameId]
+            );
+            
+            socket.emit('races_loaded', {
+                success: true,
+                races: racesResult.races,
+                totalPlayers: playersResult[0].count,
+                gameId: data.gameId
+            });
+            
+            console.log(`✅ Sent ${racesResult.races.length} races to player`);
+            
+            // Sende aktuelle Rassenauswahlen
+            await broadcastRaceSelectionSync(data.gameId);
+            
+        } else {
+            socket.emit('error', racesResult.message);
         }
-    });
+        
+    } catch (error) {
+        console.error('Error getting available races:', error);
+        socket.emit('error', 'Fehler beim Laden der Rassen');
+    }
+});
+
+// Rasse auswählen (noch nicht bestätigt)
+socket.on('select_race', async (data) => {
+    try {
+        console.log('🎯 Select race request:', data);
+        
+        if (!data.gameId || !data.playerName || !data.raceId) {
+            socket.emit('error', 'Unvollständige Daten für Rassenauswahl');
+            return;
+        }
+
+        const result = await raceController.selectRace(data.gameId, data.playerName, data.raceId);
+        
+        if (result.success) {
+            socket.emit('race_selected', {
+                success: true,
+                playerName: data.playerName,
+                raceId: data.raceId,
+                raceName: result.raceName
+            });
+            
+            console.log(`✅ Race ${result.raceName} selected by ${data.playerName}`);
+            
+            // Sync an alle Spieler senden
+            await broadcastRaceSelectionSync(data.gameId);
+            
+        } else {
+            socket.emit('error', result.message);
+        }
+        
+    } catch (error) {
+        console.error('Error selecting race:', error);
+        socket.emit('error', 'Fehler bei der Rassenauswahl');
+    }
+});
+
+// Rasse bestätigen
+socket.on('confirm_race', async (data) => {
+    try {
+        console.log('✅ Confirm race request:', data);
+        
+        if (!data.gameId || !data.playerName || !data.raceId) {
+            socket.emit('error', 'Unvollständige Daten für Rassenbestätigung');
+            return;
+        }
+
+        const result = await raceController.confirmRace(data.gameId, data.playerName, data.raceId);
+        
+        if (result.success) {
+            socket.emit('race_confirmed', {
+                success: true,
+                playerName: data.playerName,
+                raceId: data.raceId,
+                allReady: result.allReady
+            });
+            
+            console.log(`✅ Race confirmed by ${data.playerName} (${result.readyCount}/${result.totalCount} ready)`);
+            
+            // Sync an alle Spieler senden
+            await broadcastRaceSelectionSync(data.gameId);
+            
+            // Wenn alle Spieler bereit sind, starte das Spiel
+            if (result.allReady) {
+                console.log('🚀 All players ready - starting game...');
+                
+                const gameStartResult = await raceController.startGame(data.gameId);
+                
+                if (gameStartResult.success) {
+                    // Benachrichtige alle Spieler, dass das Spiel startet
+                    io.to(`db_game_${data.gameId}`).emit('game_start_ready', {
+                        gameId: data.gameId,
+                        message: 'Alle Spieler bereit! Spiel startet...'
+                    });
+                    
+                    console.log(`✅ Game ${data.gameId} started successfully`);
+                } else {
+                    console.error('Failed to start game:', gameStartResult.message);
+                    io.to(`db_game_${data.gameId}`).emit('error', 'Fehler beim Starten des Spiels: ' + gameStartResult.message);
+                }
+            }
+            
+        } else {
+            socket.emit('error', result.message);
+        }
+        
+    } catch (error) {
+        console.error('Error confirming race:', error);
+        socket.emit('error', 'Fehler bei der Rassenbestätigung');
+    }
+});
+
+// Rasse abwählen (um sie zu ändern)
+socket.on('deselect_race', async (data) => {
+    try {
+        console.log('❌ Deselect race request:', data);
+        
+        if (!data.gameId || !data.playerName) {
+            socket.emit('error', 'Unvollständige Daten für Rassenabwahl');
+            return;
+        }
+
+        const result = await raceController.deselectRace(data.gameId, data.playerName);
+        
+        if (result.success) {
+            socket.emit('race_deselected', {
+                success: true,
+                playerName: data.playerName,
+                wasConfirmed: result.wasConfirmed
+            });
+            
+            console.log(`✅ Race deselected by ${data.playerName} (was confirmed: ${result.wasConfirmed})`);
+            
+            // Sync an alle Spieler senden
+            await broadcastRaceSelectionSync(data.gameId);
+            
+        } else {
+            socket.emit('error', result.message);
+        }
+        
+    } catch (error) {
+        console.error('Error deselecting race:', error);
+        socket.emit('error', 'Fehler bei der Rassenabwahl');
+    }
+});
+
+// Rassendetails laden
+socket.on('get_race_details', async (data) => {
+    try {
+        console.log('📖 Get race details request:', data);
+        
+        if (!data.raceId) {
+            socket.emit('error', 'Rassen-ID fehlt');
+            return;
+        }
+
+        const result = await raceController.getRaceDetails(data.raceId);
+        
+        if (result.success) {
+            socket.emit('race_details_loaded', {
+                success: true,
+                race: result.race,
+                units: result.units
+            });
+            
+            console.log(`✅ Race details sent for race ${result.race.name}`);
+            
+        } else {
+            socket.emit('error', result.message);
+        }
+        
+    } catch (error) {
+        console.error('Error getting race details:', error);
+        socket.emit('error', 'Fehler beim Laden der Rassendetails');
+    }
+});
+
+// Rassenauswahl verlassen
+socket.on('leave_race_selection', async (data) => {
+    try {
+        console.log('🚪 Leave race selection request:', data);
+        
+        if (!data.gameId || !data.playerName) {
+            console.warn('Incomplete data for leaving race selection');
+            return;
+        }
+
+        const result = await raceController.leaveRaceSelection(data.gameId, data.playerName);
+        
+        if (result.success) {
+            // Socket aus dem Raum entfernen
+            socket.leave(`db_game_${data.gameId}`);
+            
+            // Socket-Daten löschen
+            delete socket.raceGameId;
+            delete socket.racePlayerName;
+            
+            socket.emit('race_selection_left', {
+                success: true,
+                gameId: data.gameId
+            });
+            
+            console.log(`✅ Player ${data.playerName} left race selection for game ${data.gameId}`);
+            
+            // Sync an verbleibende Spieler senden
+            await broadcastRaceSelectionSync(data.gameId);
+            
+        } else {
+            socket.emit('error', result.message);
+        }
+        
+    } catch (error) {
+        console.error('Error leaving race selection:', error);
+        socket.emit('error', 'Fehler beim Verlassen der Rassenauswahl');
+    }
+});
+
+// Hilfsfunktion: Race Selection Sync an alle Spieler senden
+async function broadcastRaceSelectionSync(gameId) {
+    try {
+        const result = await raceController.getAllRaceSelections(gameId);
+        if (result.success) {
+            io.to(`db_game_${gameId}`).emit('race_selection_sync', {
+                gameId: gameId,
+                selections: result.selections,
+                timestamp: new Date().toISOString()
+            });
+            console.log(`✓ Race selection sync broadcasted for game ${gameId}`);
+        }
+    } catch (error) {
+        console.error('Error broadcasting race selection sync:', error);
+    }
+}
 
     // Game State Events (for active games)
     socket.on('join_db_game_room', (data) => {
@@ -884,24 +1127,6 @@ socket.on('leave_chat_room', (data) => {
         } catch (error) {
             console.error('Error rejoining DB game room:', error);
             socket.emit('error', 'Fehler beim Wiederverbinden');
-        }
-    });
-
-    socket.on('request_race_selection_sync', async (data) => {
-        try {
-            console.log(`Race selection sync requested by ${data.playerName} for game ${data.gameId}`);
-            
-            const result = await gameController.getAllRaceSelections(data.gameId);
-            if (result.success) {
-                socket.emit('race_selection_sync', {
-                    gameId: data.gameId,
-                    selections: result.selections,
-                    timestamp: new Date().toISOString()
-                });
-            }
-        } catch (error) {
-            console.error('Error sending race selection sync:', error);
-            socket.emit('error', 'Fehler beim Synchronisieren der Rassenwahlen');
         }
     });
 
@@ -992,6 +1217,10 @@ app.use((req, res) => {
         method: req.method,
         timestamp: new Date().toISOString()
     });
+});
+
+app.get('/race-selection.html', (req, res) => {
+    res.sendFile(path.join(__dirname, '../public/race-selection.html'));
 });
 
 // Handle uncaught exceptions

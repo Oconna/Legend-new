@@ -1,0 +1,285 @@
+/* Race Details Modal Styles - public/css/race-details.css */
+
+/* Race Details Content */
+.race-details {
+    padding: 2rem;
+}
+
+.race-details-header {
+    text-align: center;
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid #eee;
+}
+
+.race-details-header h2 {
+    color: #2c3e50;
+    font-size: 2.2rem;
+    margin-bottom: 0.5rem;
+}
+
+.race-details-header .race-color-indicator {
+    display: inline-block;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    margin: 0 1rem;
+    border: 3px solid white;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.race-description-full {
+    color: #7f8c8d;
+    font-size: 1.1rem;
+    line-height: 1.6;
+    margin-top: 1rem;
+    text-align: center;
+}
+
+/* Units Grid */
+.units-section h3 {
+    color: #2c3e50;
+    font-size: 1.8rem;
+    margin-bottom: 1.5rem;
+    text-align: center;
+}
+
+.units-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+/* Unit Card */
+.unit-card {
+    background: #f8f9fa;
+    border: 2px solid #e9ecef;
+    border-radius: 8px;
+    padding: 1rem;
+    transition: all 0.3s ease;
+}
+
+.unit-card:hover {
+    border-color: #3498db;
+    box-shadow: 0 4px 8px rgba(52, 152, 219, 0.1);
+}
+
+.unit-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.8rem;
+}
+
+.unit-name {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: #2c3e50;
+}
+
+.unit-cost {
+    background: #ffc107;
+    color: #212529;
+    padding: 0.3rem 0.8rem;
+    border-radius: 15px;
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.unit-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.stat-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.3rem;
+    background: white;
+    border-radius: 4px;
+    font-size: 0.9rem;
+}
+
+.stat-label {
+    color: #6c757d;
+    font-weight: 600;
+}
+
+.stat-value {
+    color: #2c3e50;
+    font-weight: 700;
+}
+
+/* Stat Icons */
+.stat-item.attack .stat-value { color: #dc3545; }
+.stat-item.health .stat-value { color: #28a745; }
+.stat-item.movement .stat-value { color: #007bff; }
+.stat-item.range .stat-value { color: #fd7e14; }
+
+.unit-description {
+    color: #6c757d;
+    font-size: 0.9rem;
+    line-height: 1.4;
+    font-style: italic;
+    background: #e9ecef;
+    padding: 0.8rem;
+    border-radius: 6px;
+    border-left: 4px solid #3498db;
+}
+
+/* Race Stats Summary */
+.race-stats-summary {
+    background: #e3f2fd;
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin: 2rem 0;
+    border-left: 4px solid #2196f3;
+}
+
+.race-stats-summary h4 {
+    color: #1976d2;
+    margin-bottom: 1rem;
+    font-size: 1.3rem;
+}
+
+.summary-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1rem;
+}
+
+.summary-stat {
+    text-align: center;
+    background: white;
+    padding: 1rem;
+    border-radius: 6px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.summary-stat-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #2c3e50;
+    display: block;
+}
+
+.summary-stat-label {
+    color: #6c757d;
+    font-size: 0.9rem;
+    margin-top: 0.3rem;
+}
+
+/* Modal Actions */
+.race-details-actions {
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+    padding-top: 2rem;
+    border-top: 2px solid #eee;
+}
+
+.race-details-actions .btn {
+    min-width: 150px;
+    padding: 1rem 2rem;
+    font-size: 1.1rem;
+}
+
+/* Loading State für Details */
+.race-details-loading {
+    text-align: center;
+    padding: 3rem;
+}
+
+.race-details-loading .spinner {
+    width: 40px;
+    height: 40px;
+    margin-bottom: 1rem;
+}
+
+/* Responsive für Race Details */
+@media (max-width: 768px) {
+    .race-details {
+        padding: 1rem;
+    }
+
+    .race-details-header h2 {
+        font-size: 1.8rem;
+    }
+
+    .units-grid {
+        grid-template-columns: 1fr;
+        gap: 0.8rem;
+    }
+
+    .unit-stats {
+        grid-template-columns: 1fr;
+    }
+
+    .summary-stats {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.8rem;
+    }
+
+    .race-details-actions {
+        flex-direction: column;
+    }
+
+    .race-details-actions .btn {
+        width: 100%;
+    }
+}
+
+@media (max-width: 480px) {
+    .race-details-header h2 {
+        font-size: 1.5rem;
+    }
+
+    .unit-header {
+        flex-direction: column;
+        gap: 0.5rem;
+        text-align: center;
+    }
+
+    .summary-stats {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Tooltips für Stats */
+.stat-item[title] {
+    cursor: help;
+}
+
+.stat-item:hover {
+    background: #f1f3f4;
+}
+
+/* Unit Type Indicators */
+.unit-card.melee { border-left: 4px solid #dc3545; }
+.unit-card.ranged { border-left: 4px solid #fd7e14; }
+.unit-card.magic { border-left: 4px solid #6f42c1; }
+.unit-card.support { border-left: 4px solid #28a745; }
+.unit-card.flying { border-left: 4px solid #17a2b8; }
+
+/* Animation für Unit Cards */
+@keyframes slideInLeft {
+    from {
+        opacity: 0;
+        transform: translateX(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+.unit-card {
+    animation: slideInLeft 0.4s ease-out;
+}
+
+.unit-card:nth-child(odd) { animation-delay: 0.1s; }
+.unit-card:nth-child(even) { animation-delay: 0.2s; }

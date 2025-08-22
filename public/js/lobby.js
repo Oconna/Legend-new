@@ -125,12 +125,14 @@ init() {
             console.log('Lobby players updated:', players);
             this.updateGamePlayersList(players);
             this.updatePlayerCounts(players);
+			this.updateStartButton();
         });
 
         this.socket.on('player_ready_status', (data) => {
             console.log('Player ready status updated:', data);
             this.updateReadyStatus(data);
             this.updatePlayerCounts(data.players);
+			this.updateStartButton();
         });
 
         this.socket.on('player_ready_notification', (data) => {
@@ -281,6 +283,147 @@ init() {
             }
         }
     }
+	
+	// NEUE Methoden - VOR der schließenden } der StrategyGameClient Klasse einfügen
+
+// Race Selection Started Handler
+handleRaceSelectionStarted(data) {
+    if (!data.success) {
+        this.showError('Fehler beim Starten der Rassenauswahl: ' + data.message);
+        return;
+    }
+
+    console.log(`🎭 Race selection started for game ${data.gameId}`);
+    
+    // UI-Feedback anzeigen
+    showNotification('Rassenauswahl startet...', 'info');
+    
+    // Kurze Verzögerung für bessere UX
+    setTimeout(() => {
+        this.redirectToRaceSelection(data);
+    }, 1500);
+}
+
+// Weiterleitung zur Rassenauswahl
+redirectToRaceSelection(data) {
+    if (!data.gameId || !this.playerName) {
+        console.error('Missing data for race selection redirect:', data);
+        this.showError('Fehler beim Weiterleiten zur Rassenauswahl');
+        return;
+    }
+
+    console.log(`🚀 Redirecting to race selection: Game ${data.gameId}, Player ${this.playerName}`);
+    
+    // Chat-Room verlassen
+    if (this.currentGameId) {
+        this.leaveChatRoom(this.currentGameId);
+    }
+    
+    // Weiterleitung zur Rassenauswahl-Seite
+    const raceSelectionUrl = `/race-selection.html?gameId=${data.gameId}&player=${encodeURIComponent(this.playerName)}`;
+    window.location.href = raceSelectionUrl;
+}
+
+// Host kann Spiel starten (Rassenauswahl beginnen)
+startRaceSelection() {
+    if (!this.currentGameId || !this.isHost) {
+        console.warn('Cannot start race selection: not host or no game');
+        showNotification('Nur der Host kann die Rassenauswahl starten', 'error');
+        return;
+    }
+
+    // Prüfe ob genügend Spieler bereit sind
+    const readyPlayers = this.lobbyPlayers?.filter(p => p.ready).length || 0;
+    const totalPlayers = this.lobbyPlayers?.length || 0;
+
+    if (readyPlayers < 2) {
+        showNotification('Mindestens 2 Spieler müssen bereit sein', 'error');
+        return;
+    }
+
+    if (readyPlayers !== totalPlayers) {
+        if (!confirm(`Nicht alle Spieler sind bereit (${readyPlayers}/${totalPlayers}). Trotzdem starten?`)) {
+            return;
+        }
+    }
+
+    console.log(`🚀 Host starting race selection for game ${this.currentGameId}`);
+    
+    // Server-Event senden
+    this.socket.emit('start_game', {
+        gameId: this.currentGameId,
+        playerName: this.playerName
+    });
+
+    // UI-Feedback
+    showNotification('Starte Rassenauswahl...', 'info');
+    
+    // Start-Button deaktivieren
+    const startBtn = document.getElementById('startGameBtn');
+    if (startBtn) {
+        startBtn.disabled = true;
+        startBtn.textContent = 'Startet...';
+    }
+}
+
+// Start-Button aktualisieren
+updateStartButton() {
+    let startBtn = document.getElementById('startGameBtn');
+    
+    if (this.isHost) {
+        if (!startBtn) {
+            // Start-Button erstellen falls nicht vorhanden
+            const actionsContainer = document.querySelector('.lobby-actions') || 
+                                   document.querySelector('.current-game-actions') ||
+                                   document.querySelector('.game-lobby-right') ||
+                                   document.querySelector('.current-game-section');
+            
+            if (actionsContainer) {
+                startBtn = document.createElement('button');
+                startBtn.id = 'startGameBtn';
+                startBtn.className = 'btn btn-primary';
+                startBtn.textContent = 'Rassenauswahl starten';
+                startBtn.onclick = () => this.startRaceSelection();
+                
+                // Button neben Ready-Button einfügen
+                const readyBtn = document.getElementById('readyBtn');
+                if (readyBtn && readyBtn.parentNode) {
+                    readyBtn.parentNode.insertBefore(startBtn, readyBtn.nextSibling);
+                } else {
+                    actionsContainer.appendChild(startBtn);
+                }
+            }
+        }
+        
+        if (startBtn) {
+            startBtn.style.display = 'inline-block';
+            
+            // Button-Status basierend auf Bereitschaft aktualisieren
+            const readyPlayers = this.lobbyPlayers?.filter(p => p.ready).length || 0;
+            const totalPlayers = this.lobbyPlayers?.length || 0;
+            
+            if (readyPlayers >= 2) {
+                startBtn.disabled = false;
+                startBtn.textContent = `Rassenauswahl starten (${readyPlayers}/${totalPlayers} bereit)`;
+                startBtn.className = 'btn btn-success';
+            } else {
+                startBtn.disabled = true;
+                startBtn.textContent = `Warte auf Spieler (${readyPlayers}/${totalPlayers} bereit)`;
+                startBtn.className = 'btn btn-secondary';
+            }
+        }
+    } else {
+        // Nicht-Host: Button verstecken
+        if (startBtn) {
+            startBtn.style.display = 'none';
+        }
+    }
+}
+
+// Fehler anzeigen
+showError(message) {
+    showNotification(message, 'error');
+}
 
     // Chat initialisieren
     initializeChat() {
@@ -855,12 +998,13 @@ showGameLobby(data) {
     // Player list und counts aktualisieren
     this.updateGamePlayersList(data.players || []);
     this.updatePlayerCounts(data.players || []);
+	this.updateStartButton();
     
     // Chat für Lobby initialisieren
     setTimeout(() => {
         this.joinChatRoom(this.currentGameId);
     }, 500);
-    
+    this.updateStartButton();
     console.log('✅ Game lobby shown with layout manager');
 }
 
@@ -1016,6 +1160,7 @@ onDefaultLayoutActivated() {
         // Update ready counts
         if (data.players) {
             this.updatePlayerCounts(data.players);
+			this.updateStartButton();
         }
         
         // Update status text and button
@@ -1443,4 +1588,52 @@ function resetLayout() {
     if (window.layoutManager) {
         window.layoutManager.reset();
     }
+}
+
+if (!document.getElementById('race-selection-lobby-styles')) {
+    const styleSheet = document.createElement('style');
+    styleSheet.id = 'race-selection-lobby-styles';
+    styleSheet.textContent = `
+        .lobby-actions, .current-game-actions {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 1rem;
+        }
+
+        #startGameBtn {
+            min-width: 200px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        #startGameBtn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        #startGameBtn.btn-success {
+            background: #28a745;
+            border-color: #28a745;
+        }
+
+        #startGameBtn.btn-success:hover:not(:disabled) {
+            background: #218838;
+            border-color: #1e7e34;
+            transform: translateY(-2px);
+        }
+
+        @media (max-width: 768px) {
+            .lobby-actions, .current-game-actions {
+                flex-direction: column;
+            }
+            
+            #startGameBtn {
+                width: 100%;
+                margin-top: 0.5rem;
+            }
+        }
+    `;
+    document.head.appendChild(styleSheet);
 }

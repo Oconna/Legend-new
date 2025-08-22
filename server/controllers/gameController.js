@@ -257,6 +257,79 @@ class GameController {
             return { success: false, message: 'Fehler beim Spielstart: ' + error.message };
         }
     }
+	
+	async createGameInDatabase(gameData) {
+    try {
+        console.log('📝 Creating game in database:', gameData);
+
+        // Spiel in Datenbank erstellen
+        const gameResult = await db.query(`
+            INSERT INTO games (name, max_players, current_players, map_size, status, created_at)
+            VALUES (?, ?, ?, ?, ?, NOW())
+        `, [
+            gameData.name,
+            gameData.maxPlayers,
+            gameData.players.length,
+            gameData.mapSize,
+            gameData.status || 'race_selection' // Default Status
+        ]);
+
+        const gameId = gameResult.insertId;
+        console.log(`✅ Game created in database with ID: ${gameId}`);
+
+        // Spieler in Datenbank einfügen
+        const playerPromises = gameData.players.map((player, index) => {
+            return db.query(`
+                INSERT INTO game_players (game_id, player_name, is_ready, turn_order, joined_at)
+                VALUES (?, ?, ?, ?, NOW())
+            `, [
+                gameId,
+                player.name,
+                player.ready ? 1 : 0,
+                index + 1 // Turn order basierend auf Join-Reihenfolge
+            ]);
+        });
+
+        await Promise.all(playerPromises);
+        console.log(`✅ ${gameData.players.length} players added to database game ${gameId}`);
+
+        return {
+            success: true,
+            gameId: gameId,
+            message: 'Spiel erfolgreich in Datenbank erstellt'
+        };
+
+    } catch (error) {
+        console.error('❌ Error creating game in database:', error);
+        return {
+            success: false,
+            message: 'Fehler beim Erstellen des Spiels in der Datenbank: ' + error.message
+        };
+    }
+}
+
+// ZUSÄTZLICHE Hilfsfunktion: Spiel-Status prüfen
+async getGameStatus(gameId) {
+    try {
+        const result = await db.query(
+            'SELECT id, status, name, current_players, max_players FROM games WHERE id = ?',
+            [gameId]
+        );
+
+        if (result.length === 0) {
+            return { success: false, message: 'Spiel nicht gefunden' };
+        }
+
+        return {
+            success: true,
+            game: result[0]
+        };
+
+    } catch (error) {
+        console.error('Error getting game status:', error);
+        return { success: false, message: 'Fehler beim Abrufen des Spielstatus' };
+    }
+}
 
     async placeStartingUnits(gameId, players) {
         try {

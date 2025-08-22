@@ -312,15 +312,38 @@ class RaceSelectionClient {
 	
 handleMapGenerated(data) {
     if (data.success) {
-        console.log('🗺️ Map successfully generated! Redirecting to game...');
+        console.log('🗺️ Map successfully generated!', data);
+        
+        // Entferne Warteanzeige
+        const waitingDiv = document.getElementById('mapGenerationWaiting');
+        if (waitingDiv) waitingDiv.remove();
+        
+        // Update Status
         this.updateSelectionStatus('Karte erfolgreich generiert! Spiel startet...');
+        this.showSuccess('Karte generiert! Weiterleitung zum Spiel...');
+        this.showProgress('Lade Spiel...', 100);
         
         // Weiterleitung zum Hauptspiel nach kurzer Verzögerung
         setTimeout(() => {
-            window.location.href = `/game.html?gameId=${data.gameId}&player=${encodeURIComponent(this.playerName)}`;
+            const gameUrl = `/game.html?gameId=${data.gameId}&playerName=${encodeURIComponent(this.playerName)}`;
+            console.log('Redirecting to:', gameUrl);
+            window.location.href = gameUrl;
         }, 2000);
     } else {
         this.showError('Fehler bei der Kartengenerierung: ' + data.message);
+        
+        // Bei Fehler: Zeige Rassen-UI wieder an
+        this.showRaceSelection();
+    }
+}
+
+showRaceSelection() {
+    const racesGrid = document.getElementById('racesGrid');
+    const confirmBtn = document.getElementById('confirmBtn');
+    
+    if (racesGrid) racesGrid.style.display = 'grid';
+    if (confirmBtn && this.selectedRace && !this.isConfirmed) {
+        confirmBtn.style.display = 'block';
     }
 }
 
@@ -450,15 +473,113 @@ handleRaceConfirmed(data) {
         }
     }
 
-    handleGameStartReady(data) {
-        console.log('🚀 Game is starting...', data);
-        this.updateSelectionStatus('Spiel startet! Karte wird generiert...');
+handleGameStartReady(data) {
+    console.log('🚀 Game is starting automatically...', data);
+    
+    // Update UI für automatischen Start
+    this.updateSelectionStatus('Alle Spieler bereit! Karte wird generiert...');
+    this.showProgress('Kartengenerierung läuft...', 75);
+    
+    // Zeige Info-Message
+    this.showSuccess(data.message || 'Kartengenerierung startet automatisch!');
+    
+    // Verstecke alle Rassen-UI Elemente
+    this.hideRaceSelection();
+    
+    // Zeige Warteanzeige
+    this.showWaitingForMapGeneration();
+}
+
+// Neue UI-Hilfsmethoden:
+hideRaceSelection() {
+    const racesGrid = document.getElementById('racesGrid');
+    const confirmBtn = document.getElementById('confirmBtn');
+    const changeBtn = document.getElementById('changeBtn');
+    
+    if (racesGrid) racesGrid.style.display = 'none';
+    if (confirmBtn) confirmBtn.style.display = 'none';
+    if (changeBtn) changeBtn.style.display = 'none';
+}
+
+showWaitingForMapGeneration() {
+    const container = document.querySelector('.container');
+    if (!container) return;
+    
+    // Erstelle Wartebereich für Kartengenerierung
+    const waitingDiv = document.createElement('div');
+    waitingDiv.id = 'mapGenerationWaiting';
+    waitingDiv.className = 'waiting-for-map';
+    waitingDiv.innerHTML = `
+        <div class="map-generation-info">
+            <h3>🗺️ Karte wird generiert...</h3>
+            <div class="loading-spinner"></div>
+            <p>Alle Spieler haben ihre Rassen gewählt.</p>
+            <p>Die Karte wird automatisch erstellt.</p>
+            <div class="progress-dots">
+                <span class="dot">●</span>
+                <span class="dot">●</span>
+                <span class="dot">●</span>
+            </div>
+        </div>
+    `;
+    
+    container.appendChild(waitingDiv);
+    
+    // Füge CSS für die Warteanimation hinzu
+    const style = document.createElement('style');
+    style.textContent = `
+        .waiting-for-map {
+            text-align: center;
+            padding: 40px 20px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            margin: 20px 0;
+        }
         
-        // Weiterleitung zum Spiel nach kurzer Verzögerung
-        setTimeout(() => {
-            window.location.href = `/game/${this.gameDbId}?player=${encodeURIComponent(this.playerName)}`;
-        }, 3000);
-    }
+        .map-generation-info h3 {
+            color: #4CAF50;
+            margin-bottom: 20px;
+            font-size: 1.8em;
+        }
+        
+        .loading-spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid #4CAF50;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        
+        .progress-dots {
+            margin-top: 20px;
+        }
+        
+        .progress-dots .dot {
+            display: inline-block;
+            margin: 0 5px;
+            font-size: 1.5em;
+            opacity: 0.3;
+            animation: blink 1.5s infinite;
+        }
+        
+        .progress-dots .dot:nth-child(1) { animation-delay: 0s; }
+        .progress-dots .dot:nth-child(2) { animation-delay: 0.5s; }
+        .progress-dots .dot:nth-child(3) { animation-delay: 1s; }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        @keyframes blink {
+            0%, 50% { opacity: 0.3; }
+            25% { opacity: 1; }
+        }
+    `;
+    document.head.appendChild(style);
+}
 
     showRaceDetails(raceId) {
         console.log(`📋 Loading race details for race ${raceId}`);

@@ -160,32 +160,42 @@ class GameController {
     }
 
     async getAllRaceSelections(gameId) {
-        try {
-            const selections = await db.query(`
-                SELECT 
-                    gp.player_name,
-                    gp.race_id,
-                    gp.race_confirmed,
-                    r.name as race_name,
-                    r.color_hex as race_color
-                FROM game_players gp
-                LEFT JOIN races r ON gp.race_id = r.id
-                WHERE gp.game_id = ? AND gp.is_active = 1
-                ORDER BY gp.turn_order
-            `, [gameId]);
+    try {
+        console.log(`Getting all race selections for game ${gameId}`);
 
-            console.log(`Retrieved race selections for game ${gameId}:`, selections.map(s => ({
-                player: s.player_name,
-                race: s.race_name,
-                confirmed: s.race_confirmed
-            })));
+        // Hole alle Spieler und ihre Rassenauswahlen
+        const selections = await db.query(`
+            SELECT 
+                gp.id as player_id,
+                gp.player_name,
+                gp.race_id,
+                gp.race_confirmed,
+                gp.socket_id,
+                r.name as race_name,
+                r.color_hex as race_color
+            FROM game_players gp
+            LEFT JOIN races r ON gp.race_id = r.id
+            WHERE gp.game_id = ? AND gp.is_active = 1
+            ORDER BY gp.turn_order
+        `, [gameId]);
 
-            return { success: true, selections: selections };
-        } catch (error) {
-            console.error('Error getting race selections:', error);
-            return { success: false, message: 'Fehler beim Abrufen der Rassenwahlen' };
-        }
+        console.log(`Found ${selections.length} player selections for game ${gameId}`);
+
+        return {
+            success: true,
+            selections: selections,
+            gameId: gameId
+        };
+
+    } catch (error) {
+        console.error('Error getting race selections:', error);
+        return { 
+            success: false, 
+            message: 'Fehler beim Laden der Rassenauswahlen',
+            selections: []
+        };
     }
+}
 
     async startGame(gameId) {
         try {

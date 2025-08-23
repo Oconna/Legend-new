@@ -1,0 +1,92 @@
+{
+  "Version": 1,
+  "WorkspaceRootPath": "C:\\Users\\Nico-\\source\\repos\\Legend-new\\",
+  "Documents": [
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\Nico-\\source\\repos\\Legend-new\\public\\game.html||{40D31677-CBC0-4297-A9EF-89D907823A98}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:public\\game.html||{40D31677-CBC0-4297-A9EF-89D907823A98}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\Nico-\\source\\repos\\Legend-new\\server\\controllers\\mapController.js||{14D17961-FE51-464D-9111-C4AF11D7D99A}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:server\\controllers\\mapController.js||{14D17961-FE51-464D-9111-C4AF11D7D99A}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\Nico-\\source\\repos\\Legend-new\\server\\models\\Map.js||{14D17961-FE51-464D-9111-C4AF11D7D99A}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:server\\models\\Map.js||{14D17961-FE51-464D-9111-C4AF11D7D99A}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\Nico-\\source\\repos\\Legend-new\\public\\js\\game.js||{14D17961-FE51-464D-9111-C4AF11D7D99A}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:public\\js\\game.js||{14D17961-FE51-464D-9111-C4AF11D7D99A}"
+    }
+  ],
+  "DocumentGroupContainers": [
+    {
+      "Orientation": 0,
+      "VerticalTabListWidth": 256,
+      "DocumentGroups": [
+        {
+          "DockedWidth": 200,
+          "SelectedChildIndex": 0,
+          "Children": [
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "game.html",
+              "DocumentMoniker": "C:\\Users\\Nico-\\source\\repos\\Legend-new\\public\\game.html",
+              "RelativeDocumentMoniker": "public\\game.html",
+              "ToolTip": "C:\\Users\\Nico-\\source\\repos\\Legend-new\\public\\game.html",
+              "RelativeToolTip": "public\\game.html",
+              "ViewState": "AgIAAAACAAAAAAAAAAAYwBYCAAAmAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001512|",
+              "WhenOpened": "2025-08-23T12:46:51.079Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "mapController.js",
+              "DocumentMoniker": "C:\\Users\\Nico-\\source\\repos\\Legend-new\\server\\controllers\\mapController.js",
+              "RelativeDocumentMoniker": "server\\controllers\\mapController.js",
+              "ToolTip": "C:\\Users\\Nico-\\source\\repos\\Legend-new\\server\\controllers\\mapController.js",
+              "RelativeToolTip": "server\\controllers\\mapController.js",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAA0AAAArAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001646|",
+              "WhenOpened": "2025-08-23T12:44:01.378Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 2,
+              "Title": "Map.js",
+              "DocumentMoniker": "C:\\Users\\Nico-\\source\\repos\\Legend-new\\server\\models\\Map.js",
+              "RelativeDocumentMoniker": "server\\models\\Map.js",
+              "ToolTip": "C:\\Users\\Nico-\\source\\repos\\Legend-new\\server\\models\\Map.js",
+              "RelativeToolTip": "server\\models\\Map.js",
+              "ViewState": "AgIAAEIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001646|",
+              "WhenOpened": "2025-08-23T12:43:54.508Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 3,
+              "Title": "game.js",
+              "DocumentMoniker": "C:\\Users\\Nico-\\source\\repos\\Legend-new\\public\\js\\game.js",
+              "RelativeDocumentMoniker": "public\\js\\game.js",
+              "ToolTip": "C:\\Users\\Nico-\\source\\repos\\Legend-new\\public\\js\\game.js",
+              "RelativeToolTip": "public\\js\\game.js",
+              "ViewState": "AgIAAGMDAAAAAAAAAAAkwHYDAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001646|",
+              "WhenOpened": "2025-08-23T12:42:18.724Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{269a02dc-6af8-11d3-bdc4-00c04f688e50}"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

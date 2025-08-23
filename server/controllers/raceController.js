@@ -323,19 +323,6 @@ async confirmRaceSelection(gameId, playerName, raceId) {
             return { success: false, message: 'Du hast bereits eine Rasse bestätigt' };
         }
 
-        // Prüfe ob die Rasse bereits von einem anderen Spieler bestätigt wurde
-        const raceAlreadyTaken = await db.query(
-            'SELECT player_name FROM game_players WHERE game_id = ? AND race_id = ? AND race_confirmed = 1 AND player_name != ?',
-            [gameId, raceId, playerName]
-        );
-
-        if (raceAlreadyTaken.length > 0) {
-            return { 
-                success: false, 
-                message: `Rasse bereits von ${raceAlreadyTaken[0].player_name} bestätigt` 
-            };
-        }
-
         // Bestätige die Rassenauswahl
         await db.query(
             'UPDATE game_players SET race_id = ?, race_confirmed = 1 WHERE game_id = ? AND player_name = ?',

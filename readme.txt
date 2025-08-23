@@ -6,3 +6,10 @@ Folgende Funktionen sind bereits implementiert:
 - Spieleranzahl wird synchronisiert
 - Chatfunktion
 - Rassenauswahl (15 Rassen je 10 Einheiten)
+
+
+ToDo
+
+CSS aus HTML lösen (game.html)
+Links unlesbar machen?
+

@@ -248,111 +248,13 @@
 }
 
 /* Responsive Design */
-@media (max-width: 768px) {
-    .map-controls {
-        bottom: auto;
-        top: 60px;
-        right: 5px;
-        gap: 3px;
-    }
-    
-    .map-controls button {
-        padding: 6px 8px;
-        font-size: 10px;
-        min-width: 100px;
-    }
-    
-    .navigation-help {
-        top: 5px;
-        left: 5px;
-        right: 5px;
-        transform: none;
-        font-size: 10px;
-    }
-    
-    .navigation-help li {
-        min-width: auto;
-    }
-
-.control-btn {
-    padding: 8px 12px !important;
-    border: none !important;
-    background: #667eea !important;
-    color: white !important;
-    border-radius: 4px !important;
-    cursor: pointer !important;
-    font-size: 12px !important;
-    font-weight: 600 !important;
-    transition: all 0.2s ease !important;
-    border: 1px solid rgba(255,255,255,0.2) !important;
-}
-
-.control-btn:hover {
-    background: #5a6fd8 !important;
-    transform: translateY(-1px) !important;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.3) !important;
-}
-
-.control-btn:active {
-    transform: translateY(0) !important;
-    background: #4a5ab8 !important;
-}
-
-        .map-container {
-            flex: 1;
-            position: relative;
-            overflow: hidden;
-            background: #f8f9fa;
-        }
-
-        .map-viewport {
-            width: 100%;
-            height: 100%;
-            overflow: auto;
-            position: relative;
-        }
-
-        .map-grid {
-            display: grid;
-            gap: 1px;
-            background: #333;
-            padding: 10px;
-            margin: 10px;
-            border-radius: 8px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-        }
-
-        .map-tile {
-            width: 48px;
-            height: 48px;
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            cursor: pointer;
-            position: relative;
-            transition: all 0.2s ease;
-        }
-
-        .map-tile:hover {
-            transform: scale(1.1);
-            z-index: 10;
-            border: 2px solid #fff;
-        }
-
-        .tile-building {
-            position: absolute;
-            top: 2px;
-            left: 2px;
-            width: 18px;
-            height: 18px;
-            border-radius: 3px;
-            border: 1px solid rgba(255, 255, 255, 0.7);
-            font-size: 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-weight: bold;
-            text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.5);
-        }
+        @media (max-width: 768px) {
+            .map-controls {
+                bottom: auto;
+                top: 60px;
+                right: 5px;
+                gap: 3px;
+            }
 
             .map-controls button {
                     padding: 6px 8px;

@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Strategiespiel - Spiel</title>
-    <link rel="stylesheet" href="css/style.css">
     <style>
         * {
             margin: 0;
@@ -134,6 +133,43 @@
             cursor: not-allowed;
             transform: none;
         }
+		
+		.map-controls {
+    position: absolute !important;
+    top: 10px !important;
+    right: 10px !important;
+    z-index: 100 !important;
+    display: flex !important;
+    gap: 5px !important;
+    background: rgba(52, 73, 94, 0.9) !important;
+    padding: 8px !important;
+    border-radius: 6px !important;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.3) !important;
+}
+
+.control-btn {
+    padding: 8px 12px !important;
+    border: none !important;
+    background: #667eea !important;
+    color: white !important;
+    border-radius: 4px !important;
+    cursor: pointer !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    transition: all 0.2s ease !important;
+    border: 1px solid rgba(255,255,255,0.2) !important;
+}
+
+.control-btn:hover {
+    background: #5a6fd8 !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.3) !important;
+}
+
+.control-btn:active {
+    transform: translateY(0) !important;
+    background: #4a5ab8 !important;
+}
 
         .map-container {
             flex: 1;

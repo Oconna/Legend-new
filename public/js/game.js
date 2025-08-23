@@ -11,8 +11,13 @@ class StrategyGame {
         this.mapData = null;
         this.selectedTile = null;
         this.mapScale = 1.0;
-        this.minScale = 0.5;
-        this.maxScale = 2.0;
+        this.minScale = 0.3;
+        this.maxScale = 3.0;
+        this.zoomStep = 0.2;
+		
+        this.gameRenderer = null;
+		
+        this.initializeZoomControls();
         
         this.init();
     }
@@ -460,6 +465,164 @@ class StrategyGame {
             mapViewport.scrollTop = (gridRect.height - viewportRect.height) / 2;
         }
     }
+	
+    initializeZoomControls() {
+        // Event Listener für Zoom-Buttons
+        const zoomInBtn = document.querySelector('.control-btn[onclick="zoomIn()"]');
+        const zoomOutBtn = document.querySelector('.control-btn[onclick="zoomOut()"]');
+        const resetZoomBtn = document.querySelector('.control-btn[onclick="resetZoom()"]');
+        
+        if (zoomInBtn) {
+            zoomInBtn.onclick = () => this.zoomIn();
+        }
+        if (zoomOutBtn) {
+            zoomOutBtn.onclick = () => this.zoomOut();
+        }
+        if (resetZoomBtn) {
+            resetZoomBtn.onclick = () => this.resetZoom();
+        }
+        
+        // Mausrad-Zoom für Map-Viewport
+        const mapViewport = document.getElementById('mapViewport');
+        if (mapViewport) {
+            mapViewport.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                
+                if (e.deltaY > 0) {
+                    this.zoomOut();
+                } else {
+                    this.zoomIn();
+                }
+            }, { passive: false });
+        }
+        
+        // Tastatur-Shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+                return; // Ignoriere wenn in Input-Feldern
+            }
+            
+            switch (e.key) {
+                case '+':
+                case '=':
+                    e.preventDefault();
+                    this.zoomIn();
+                    break;
+                case '-':
+                    e.preventDefault();
+                    this.zoomOut();
+                    break;
+                case '0':
+                    e.preventDefault();
+                    this.resetZoom();
+                    break;
+            }
+        });
+    }
+    
+    zoomIn() {
+        console.log('Zooming in...');
+        
+        // Prüfe ob GameRenderer existiert
+        if (this.gameRenderer && typeof this.gameRenderer.zoomIn === 'function') {
+            this.gameRenderer.zoomIn();
+            return;
+        }
+        
+        // Fallback: Grid-basiertes Zoom
+        const newScale = Math.min(this.maxScale, this.mapScale + this.zoomStep);
+        if (newScale !== this.mapScale) {
+            this.mapScale = newScale;
+            this.applyMapZoom();
+            this.updateZoomDisplay();
+        }
+    }
+    
+    zoomOut() {
+        console.log('Zooming out...');
+        
+        // Prüfe ob GameRenderer existiert
+        if (this.gameRenderer && typeof this.gameRenderer.zoomOut === 'function') {
+            this.gameRenderer.zoomOut();
+            return;
+        }
+        
+        // Fallback: Grid-basiertes Zoom
+        const newScale = Math.max(this.minScale, this.mapScale - this.zoomStep);
+        if (newScale !== this.mapScale) {
+            this.mapScale = newScale;
+            this.applyMapZoom();
+            this.updateZoomDisplay();
+        }
+    }
+    
+    resetZoom() {
+        console.log('Resetting zoom...');
+        
+        // Prüfe ob GameRenderer existiert
+        if (this.gameRenderer && this.gameRenderer.zoom !== undefined) {
+            this.gameRenderer.zoom = 1.0;
+            this.gameRenderer.render();
+            return;
+        }
+        
+        // Fallback: Grid-basiertes Zoom
+        this.mapScale = 1.0;
+        this.applyMapZoom();
+        this.updateZoomDisplay();
+    }
+    
+    applyMapZoom() {
+        const mapGrid = document.getElementById('mapGrid');
+        if (mapGrid) {
+            mapGrid.style.transform = `scale(${this.mapScale})`;
+            mapGrid.style.transformOrigin = 'center center';
+            
+            // Smooth transitions
+            mapGrid.style.transition = 'transform 0.2s ease';
+            
+            console.log(`Map zoom applied: ${Math.round(this.mapScale * 100)}%`);
+        }
+    }
+    
+    updateZoomDisplay() {
+        // Update Zoom-Info falls vorhanden
+        let zoomInfo = document.getElementById('zoomInfo');
+        if (!zoomInfo) {
+            // Erstelle Zoom-Info Element
+            zoomInfo = document.createElement('div');
+            zoomInfo.id = 'zoomInfo';
+            zoomInfo.style.cssText = `
+                position: absolute;
+                bottom: 10px;
+                left: 10px;
+                background: rgba(0,0,0,0.7);
+                color: white;
+                padding: 5px 10px;
+                border-radius: 4px;
+                font-size: 12px;
+                z-index: 40;
+                pointer-events: none;
+            `;
+            document.querySelector('.map-container').appendChild(zoomInfo);
+        }
+        
+        const zoomPercent = Math.round(this.mapScale * 100);
+        zoomInfo.textContent = `Zoom: ${zoomPercent}%`;
+        
+        // Auto-hide nach 2 Sekunden
+        clearTimeout(this.zoomDisplayTimeout);
+        zoomInfo.style.opacity = '1';
+        this.zoomDisplayTimeout = setTimeout(() => {
+            zoomInfo.style.opacity = '0.3';
+        }, 2000);
+    }
+    
+    // GameRenderer setzen falls vorhanden
+    setGameRenderer(renderer) {
+        this.gameRenderer = renderer;
+        console.log('GameRenderer set for zoom controls');
+    }
 
     adjustMapSize() {
         // Responsive map sizing wird hier implementiert falls nötig
@@ -507,31 +670,20 @@ class StrategyGame {
 
 // Zoom Functions (Global)
 function zoomIn() {
-    if (window.game) {
-        window.game.mapScale = Math.min(window.game.maxScale, window.game.mapScale + 0.1);
-        applyMapZoom();
+    if (window.game && window.game.zoomIn) {
+        window.game.zoomIn();
     }
 }
 
 function zoomOut() {
-    if (window.game) {
-        window.game.mapScale = Math.max(window.game.minScale, window.game.mapScale - 0.1);
-        applyMapZoom();
+    if (window.game && window.game.zoomOut) {
+        window.game.zoomOut();
     }
 }
 
 function resetZoom() {
-    if (window.game) {
-        window.game.mapScale = 1.0;
-        applyMapZoom();
-    }
-}
-
-function applyMapZoom() {
-    const mapGrid = document.getElementById('mapGrid');
-    if (mapGrid) {
-        mapGrid.style.transform = `scale(${window.game.mapScale})`;
-        mapGrid.style.transformOrigin = 'top left';
+    if (window.game && window.game.resetZoom) {
+        window.game.resetZoom();
     }
 }
 

@@ -604,12 +604,27 @@ class StrategyGame {
     }
 
     // Zoom zum aktiven Tile
-    zoomToActiveTile() {
-        if (this.activeTile) {
-            console.log('🔍 Zooming to active tile:', this.activeTile);
-            this.centerOnTile(this.activeTile.x, this.activeTile.y);
+zoomToActiveTile() {
+    if (this.activeTile) {
+        console.log('🔍 Zooming to active tile:', this.activeTile);
+        
+        // Erst zentrieren, dann optional zoomen
+        this.centerOnTile(this.activeTile.x, this.activeTile.y);
+        
+        // Optional: Zoom-Level anpassen falls zu weit raus
+        if (this.mapScale < 1.0) {
+            setTimeout(() => {
+                this.mapScale = 1.0;
+                this.applyMapZoom();
+                this.updateZoomDisplay();
+                // Nach Zoom nochmals zentrieren
+                this.centerOnTile(this.activeTile.x, this.activeTile.y);
+            }, 300); // Warten bis Smooth-Scroll fertig ist
         }
+    } else {
+        console.warn('Kein aktives Tile zum Zentrieren vorhanden');
     }
+}
 
     // Hauptzoom-Funktion mit variabler Position
     zoomAtPosition(mouseX, mouseY, zoomIn) {
@@ -660,37 +675,87 @@ class StrategyGame {
     }
 
     // Auf ein bestimmtes Tile zentrieren
-    centerOnTile(tileX, tileY) {
-        console.log(`🎯 Centering on tile (${tileX}, ${tileY})`);
-        
-        const mapViewport = document.getElementById('mapViewport');
-        const mapGrid = document.getElementById('mapGrid');
-        
-        if (!mapViewport || !mapGrid) return;
-
-        // Tile-Größe (48px aus CSS)
-        const tileSize = 48;
-        
-        // Position des Tiles in der skalierten Karte berechnen
-        const tileCenterX = (tileX * tileSize + tileSize / 2) * this.mapScale;
-        const tileCenterY = (tileY * tileSize + tileSize / 2) * this.mapScale;
-        
-        // Viewport-Zentrum
-        const viewportCenterX = mapViewport.clientWidth / 2;
-        const viewportCenterY = mapViewport.clientHeight / 2;
-        
-        // Neue Scroll-Position berechnen
-        const newScrollLeft = tileCenterX - viewportCenterX;
-        const newScrollTop = tileCenterY - viewportCenterY;
-        
-        // Scroll-Position anwenden (mit Grenzen)
-        mapViewport.scrollLeft = Math.max(0, newScrollLeft);
-        mapViewport.scrollTop = Math.max(0, newScrollTop);
-        
-        // Aktives Tile setzen
-        this.activeTile = { x: tileX, y: tileY };
+centerOnTile(tileX, tileY) {
+    console.log(`🎯 Centering on tile (${tileX}, ${tileY})`);
+    
+    const mapViewport = document.getElementById('mapViewport');
+    const mapGrid = document.getElementById('mapGrid');
+    
+    if (!mapViewport || !mapGrid) {
+        console.error('MapViewport or MapGrid not found');
+        return;
     }
 
+    // Tile-Größe (48px aus CSS)
+    const baseTileSize = 48;
+    
+    // Berechne die Position des Tile-Zentrums in der nicht-skalierten Karte
+    const tileCenterX = (tileX + 0.5) * baseTileSize;
+    const tileCenterY = (tileY + 0.5) * baseTileSize;
+    
+    // Berechne die Position in der skalierten Karte
+    const scaledTileCenterX = tileCenterX * this.mapScale;
+    const scaledTileCenterY = tileCenterY * this.mapScale;
+    
+    // Viewport-Dimensionen
+    const viewportCenterX = mapViewport.clientWidth / 2;
+    const viewportCenterY = mapViewport.clientHeight / 2;
+    
+    // Berechne die neue Scroll-Position um das Tile zu zentrieren
+    const targetScrollLeft = scaledTileCenterX - viewportCenterX;
+    const targetScrollTop = scaledTileCenterY - viewportCenterY;
+    
+    // Grenzen der scrollbaren Bereiche berechnen
+    const maxScrollLeft = Math.max(0, mapGrid.scrollWidth - mapViewport.clientWidth);
+    const maxScrollTop = Math.max(0, mapGrid.scrollHeight - mapViewport.clientHeight);
+    
+    // Scroll-Position auf gültige Bereiche beschränken
+    const finalScrollLeft = Math.max(0, Math.min(maxScrollLeft, targetScrollLeft));
+    const finalScrollTop = Math.max(0, Math.min(maxScrollTop, targetScrollTop));
+    
+    console.log('Center calculations:', {
+        tileCoords: { x: tileX, y: tileY },
+        baseTileSize,
+        mapScale: this.mapScale,
+        tileCenterOriginal: { x: tileCenterX, y: tileCenterY },
+        tileCenterScaled: { x: scaledTileCenterX, y: scaledTileCenterY },
+        viewportCenter: { x: viewportCenterX, y: viewportCenterY },
+        targetScroll: { left: targetScrollLeft, top: targetScrollTop },
+        finalScroll: { left: finalScrollLeft, top: finalScrollTop }
+    });
+    
+    // Smooth-Scroll anwenden
+    mapViewport.scrollTo({
+        left: finalScrollLeft,
+        top: finalScrollTop,
+        behavior: 'smooth'
+    });
+    
+    // Aktives Tile setzen
+    this.activeTile = { x: tileX, y: tileY };
+    
+    // Optional: Visuelles Feedback
+    this.highlightTile(tileX, tileY);
+}
+
+highlightTile(tileX, tileY) {
+    // Vorherige Hervorhebung entfernen
+    const previousHighlighted = document.querySelector('.map-tile.highlighted');
+    if (previousHighlighted) {
+        previousHighlighted.classList.remove('highlighted');
+    }
+    
+    // Neues Tile hervorheben
+    const targetTile = document.querySelector(`[data-x="${tileX}"][data-y="${tileY}"]`);
+    if (targetTile) {
+        targetTile.classList.add('highlighted');
+        
+        // Auto-Remove nach 3 Sekunden
+        setTimeout(() => {
+            targetTile.classList.remove('highlighted');
+        }, 3000);
+    }
+}
     
     zoomIn() {
         console.log('🔍 Zooming in... Current scale:', this.mapScale);

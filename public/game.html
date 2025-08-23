@@ -134,18 +134,145 @@
             transform: none;
         }
 		
-		.map-controls {
-    position: absolute !important;
-    top: 10px !important;
-    right: 10px !important;
-    z-index: 100 !important;
-    display: flex !important;
-    gap: 5px !important;
-    background: rgba(52, 73, 94, 0.9) !important;
-    padding: 8px !important;
-    border-radius: 6px !important;
-    box-shadow: 0 4px 8px rgba(0,0,0,0.3) !important;
+/* Hervorgehobenes Tile (beim Zentrieren) */
+.map-tile.highlighted {
+    animation: highlightPulse 2s ease-in-out;
+    box-shadow: 0 0 0 4px #00ff00, 0 0 0 8px rgba(0, 255, 0, 0.3);
+    z-index: 15;
+    position: relative;
 }
+
+@keyframes highlightPulse {
+    0% {
+        box-shadow: 0 0 0 2px #00ff00, 0 0 0 4px rgba(0, 255, 0, 0.8);
+        transform: scale(1);
+    }
+    50% {
+        box-shadow: 0 0 0 6px #00ff00, 0 0 0 12px rgba(0, 255, 0, 0.4);
+        transform: scale(1.05);
+    }
+    100% {
+        box-shadow: 0 0 0 4px #00ff00, 0 0 0 8px rgba(0, 255, 0, 0.3);
+        transform: scale(1);
+    }
+}
+
+/* Aktives Tile (dauerhaft ausgewählt) */
+.map-tile.selected {
+    box-shadow: 0 0 0 3px #ffff00, 0 0 0 6px rgba(255, 255, 0, 0.4);
+    z-index: 12;
+    position: relative;
+    border: 2px solid #ffff00;
+}
+
+/* Map Controls erweitert */
+.map-controls {
+    position: absolute;
+    bottom: 10px;
+    right: 10px;
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.map-controls button {
+    padding: 8px 12px;
+    border: none;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    min-width: 120px;
+    text-align: left;
+}
+
+.map-controls button:hover {
+    background: rgba(0, 0, 0, 0.9);
+    transform: translateX(-5px);
+}
+
+.map-controls button:active {
+    transform: scale(0.95);
+}
+
+.map-controls .shortcut {
+    float: right;
+    opacity: 0.7;
+    font-family: monospace;
+}
+
+/* Smooth Scrolling für bessere UX */
+#mapViewport {
+    scroll-behavior: smooth;
+}
+
+/* Loading-Indikator beim Zentrieren */
+.centering-indicator {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 10px 20px;
+    border-radius: 20px;
+    z-index: 300;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    pointer-events: none;
+}
+
+.centering-indicator.show {
+    opacity: 1;
+}
+
+.centering-indicator::before {
+    content: '';
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid transparent;
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-right: 8px;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .map-controls {
+        bottom: auto;
+        top: 60px;
+        right: 5px;
+        gap: 3px;
+    }
+    
+    .map-controls button {
+        padding: 6px 8px;
+        font-size: 10px;
+        min-width: 100px;
+    }
+    
+    .navigation-help {
+        top: 5px;
+        left: 5px;
+        right: 5px;
+        transform: none;
+        font-size: 10px;
+    }
+    
+    .navigation-help li {
+        min-width: auto;
+    }
 
 .control-btn {
     padding: 8px 12px !important;

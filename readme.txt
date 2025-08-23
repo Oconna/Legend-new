@@ -12,4 +12,5 @@ ToDo
 
 CSS aus HTML lösen (game.html)
 Links unlesbar machen?
+Map verschieben mit der Maus
 

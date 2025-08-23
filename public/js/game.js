@@ -15,6 +15,11 @@ class StrategyGame {
         this.maxScale = 3.0;
         this.zoomStep = 0.2;
 		
+        this.lastMouseX = 0;
+        this.lastMouseY = 0;
+        this.zoomCenter = { x: 0.5, y: 0.5 }; // Relative Position (0-1)
+        this.activeTile = null; // Aktuell ausgewähltes/aktives Tile
+		
         this.gameRenderer = null;
 		
         this.initializeZoomControls();
@@ -311,22 +316,31 @@ class StrategyGame {
     }
 
     handleTileClick(x, y, tileData) {
-        console.log('Tile clicked:', x, y, tileData);
-
-        // Entferne vorherige Selektion
-        this.deselectTile();
-
-        // Selektiere neues Tile
-        this.selectedTile = { x, y, data: tileData };
+        console.log(`🎯 Tile clicked: (${x}, ${y})`);
         
-        // Visuelles Feedback
-        const tileElement = document.querySelector(`[data-x="${x}"][data-y="${y}"]`);
-        if (tileElement) {
-            tileElement.style.border = '2px solid #FFD700';
-            tileElement.style.zIndex = '20';
+        // Vorherige Auswahl entfernen
+        const previousSelected = document.querySelector('.map-tile.selected');
+        if (previousSelected) {
+            previousSelected.classList.remove('selected');
         }
-
-        console.log('Selected tile:', this.selectedTile);
+        
+        // Neues Tile auswählen
+        const newSelected = document.querySelector(`[data-x="${x}"][data-y="${y}"]`);
+        if (newSelected) {
+            newSelected.classList.add('selected');
+        }
+        
+        // Aktives Tile setzen
+        this.activeTile = { x, y };
+        this.selectedTile = tileData;
+        
+        // Optional: Bei Doppelklick zum Tile zentrieren
+        if (this.lastClickTime && Date.now() - this.lastClickTime < 500) {
+            this.centerOnTile(x, y);
+        }
+        this.lastClickTime = Date.now();
+        
+        // Weitere Spiellogik hier...
     }
 
     deselectTile() {
@@ -473,6 +487,7 @@ class StrategyGame {
         const zoomInBtn = document.getElementById('zoomInBtn');
         const zoomOutBtn = document.getElementById('zoomOutBtn');
         const resetZoomBtn = document.getElementById('resetZoomBtn');
+        const mapViewport = document.getElementById('mapViewport');
         
         console.log('Zoom buttons found:', { zoomInBtn, zoomOutBtn, resetZoomBtn });
         
@@ -480,7 +495,7 @@ class StrategyGame {
             zoomInBtn.addEventListener('click', (e) => {
                 e.preventDefault();
                 console.log('🔍 Zoom In clicked');
-                this.zoomIn();
+                this.zoomInAtCenter();
             });
         }
         
@@ -488,7 +503,7 @@ class StrategyGame {
             zoomOutBtn.addEventListener('click', (e) => {
                 e.preventDefault();
                 console.log('🔍 Zoom Out clicked');
-                this.zoomOut();
+                this.zoomOutAtCenter();
             });
         }
         
@@ -500,15 +515,25 @@ class StrategyGame {
             });
         }
         
-        // Mausrad-Zoom
-        const mapViewport = document.getElementById('mapViewport');
+        // Mausrad-Zoom mit variabler Position
         if (mapViewport) {
+            // Mausbewegung verfolgen
+            mapViewport.addEventListener('mousemove', (e) => {
+                const rect = mapViewport.getBoundingClientRect();
+                this.lastMouseX = e.clientX - rect.left;
+                this.lastMouseY = e.clientY - rect.top;
+                
+                // Relative Position berechnen (0-1)
+                this.zoomCenter.x = this.lastMouseX / rect.width;
+                this.zoomCenter.y = this.lastMouseY / rect.height;
+            });
+
             mapViewport.addEventListener('wheel', (e) => {
                 e.preventDefault();
                 if (e.deltaY > 0) {
-                    this.zoomOut();
+                    this.zoomOutAtMouse(e);
                 } else {
-                    this.zoomIn();
+                    this.zoomInAtMouse(e);
                 }
             }, { passive: false });
         }
@@ -523,11 +548,11 @@ class StrategyGame {
                 case '+':
                 case '=':
                     e.preventDefault();
-                    this.zoomIn();
+                    this.zoomInAtCenter();
                     break;
                 case '-':
                     e.preventDefault();
-                    this.zoomOut();
+                    this.zoomOutAtCenter();
                     break;
                 case '0':
                     e.preventDefault();
@@ -538,6 +563,134 @@ class StrategyGame {
         
         console.log('✅ Zoom controls initialized successfully');
     }
+	
+    zoomInAtMouse(event) {
+        console.log('🔍 Zooming in at mouse position...');
+        const rect = event.target.getBoundingClientRect();
+        const mouseX = event.clientX - rect.left;
+        const mouseY = event.clientY - rect.top;
+        
+        this.zoomAtPosition(mouseX, mouseY, true);
+    }
+
+    zoomOutAtMouse(event) {
+        console.log('🔍 Zooming out at mouse position...');
+        const rect = event.target.getBoundingClientRect();
+        const mouseX = event.clientX - rect.left;
+        const mouseY = event.clientY - rect.top;
+        
+        this.zoomAtPosition(mouseX, mouseY, false);
+    }
+
+    // Zoom zum Zentrum (für Buttons)
+    zoomInAtCenter() {
+        console.log('🔍 Zooming in at center...');
+        const mapViewport = document.getElementById('mapViewport');
+        if (mapViewport) {
+            const centerX = mapViewport.clientWidth / 2;
+            const centerY = mapViewport.clientHeight / 2;
+            this.zoomAtPosition(centerX, centerY, true);
+        }
+    }
+
+    zoomOutAtCenter() {
+        console.log('🔍 Zooming out at center...');
+        const mapViewport = document.getElementById('mapViewport');
+        if (mapViewport) {
+            const centerX = mapViewport.clientWidth / 2;
+            const centerY = mapViewport.clientHeight / 2;
+            this.zoomAtPosition(centerX, centerY, false);
+        }
+    }
+
+    // Zoom zum aktiven Tile
+    zoomToActiveTile() {
+        if (this.activeTile) {
+            console.log('🔍 Zooming to active tile:', this.activeTile);
+            this.centerOnTile(this.activeTile.x, this.activeTile.y);
+        }
+    }
+
+    // Hauptzoom-Funktion mit variabler Position
+    zoomAtPosition(mouseX, mouseY, zoomIn) {
+        const mapViewport = document.getElementById('mapViewport');
+        const mapGrid = document.getElementById('mapGrid');
+        
+        if (!mapViewport || !mapGrid) return;
+
+        const oldScale = this.mapScale;
+        const newScale = zoomIn 
+            ? Math.min(this.maxScale, this.mapScale + this.zoomStep)
+            : Math.max(this.minScale, this.mapScale - this.zoomStep);
+
+        if (newScale === oldScale) return; // Keine Änderung
+
+        // Aktuelle Scroll-Position speichern
+        const oldScrollLeft = mapViewport.scrollLeft;
+        const oldScrollTop = mapViewport.scrollTop;
+
+        // Viewport-Dimensionen
+        const viewportRect = mapViewport.getBoundingClientRect();
+        
+        // Mausposition relativ zum Viewport
+        const relativeMouseX = mouseX / viewportRect.width;
+        const relativeMouseY = mouseY / viewportRect.height;
+
+        // Zoom anwenden
+        this.mapScale = newScale;
+        mapGrid.style.transform = `scale(${this.mapScale})`;
+        mapGrid.style.transformOrigin = 'top left';
+
+        // Nach dem Scale-Update neue Dimensionen berechnen
+        setTimeout(() => {
+            const gridRect = mapGrid.getBoundingClientRect();
+            
+            // Neue Scroll-Position berechnen um den Zoom-Punkt zu erhalten
+            const scaleFactor = newScale / oldScale;
+            
+            const newScrollLeft = (oldScrollLeft + mouseX) * scaleFactor - mouseX;
+            const newScrollTop = (oldScrollTop + mouseY) * scaleFactor - mouseY;
+
+            mapViewport.scrollLeft = Math.max(0, newScrollLeft);
+            mapViewport.scrollTop = Math.max(0, newScrollTop);
+
+            this.updateZoomDisplay();
+            console.log('✅ Zoomed to:', Math.round(this.mapScale * 100) + '%');
+        }, 0);
+    }
+
+    // Auf ein bestimmtes Tile zentrieren
+    centerOnTile(tileX, tileY) {
+        console.log(`🎯 Centering on tile (${tileX}, ${tileY})`);
+        
+        const mapViewport = document.getElementById('mapViewport');
+        const mapGrid = document.getElementById('mapGrid');
+        
+        if (!mapViewport || !mapGrid) return;
+
+        // Tile-Größe (48px aus CSS)
+        const tileSize = 48;
+        
+        // Position des Tiles in der skalierten Karte berechnen
+        const tileCenterX = (tileX * tileSize + tileSize / 2) * this.mapScale;
+        const tileCenterY = (tileY * tileSize + tileSize / 2) * this.mapScale;
+        
+        // Viewport-Zentrum
+        const viewportCenterX = mapViewport.clientWidth / 2;
+        const viewportCenterY = mapViewport.clientHeight / 2;
+        
+        // Neue Scroll-Position berechnen
+        const newScrollLeft = tileCenterX - viewportCenterX;
+        const newScrollTop = tileCenterY - viewportCenterY;
+        
+        // Scroll-Position anwenden (mit Grenzen)
+        mapViewport.scrollLeft = Math.max(0, newScrollLeft);
+        mapViewport.scrollTop = Math.max(0, newScrollTop);
+        
+        // Aktives Tile setzen
+        this.activeTile = { x: tileX, y: tileY };
+    }
+
     
     zoomIn() {
         console.log('🔍 Zooming in... Current scale:', this.mapScale);
@@ -566,6 +719,10 @@ class StrategyGame {
         this.mapScale = 1.0;
         this.applyMapZoom();
         this.updateZoomDisplay();
+        
+        // Optional: Karte zentrieren nach Reset
+        this.centerMap();
+        
         console.log('✅ Zoom reset to 100%');
     }
     
@@ -573,7 +730,7 @@ class StrategyGame {
         const mapGrid = document.getElementById('mapGrid');
         if (mapGrid) {
             mapGrid.style.transform = `scale(${this.mapScale})`;
-            mapGrid.style.transformOrigin = 'center center';
+            mapGrid.style.transformOrigin = 'top left';
             mapGrid.style.transition = 'transform 0.2s ease';
         }
     }

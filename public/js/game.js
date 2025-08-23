@@ -227,8 +227,8 @@ class StrategyGame {
 
         // Erstelle Karten-Grid
         const mapGrid = document.getElementById('mapGrid');
-        mapGrid.style.gridTemplateColumns = `repeat(${mapSize}, 24px)`;
-        mapGrid.style.gridTemplateRows = `repeat(${mapSize}, 24px)`;
+        mapGrid.style.gridTemplateColumns = `repeat(${mapSize}, 48px)`;
+        mapGrid.style.gridTemplateRows = `repeat(${mapSize}, 48px)`;
         mapGrid.innerHTML = '';
 
         // Erstelle Tiles

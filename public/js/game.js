@@ -467,27 +467,44 @@ class StrategyGame {
     }
 	
     initializeZoomControls() {
-        // Event Listener für Zoom-Buttons
-        const zoomInBtn = document.querySelector('.control-btn[onclick="zoomIn()"]');
-        const zoomOutBtn = document.querySelector('.control-btn[onclick="zoomOut()"]');
-        const resetZoomBtn = document.querySelector('.control-btn[onclick="resetZoom()"]');
+        console.log('🎛️ Initializing zoom controls...');
+        
+        // Zoom-Buttons finden und Event Listener hinzufügen
+        const zoomInBtn = document.getElementById('zoomInBtn');
+        const zoomOutBtn = document.getElementById('zoomOutBtn');
+        const resetZoomBtn = document.getElementById('resetZoomBtn');
+        
+        console.log('Zoom buttons found:', { zoomInBtn, zoomOutBtn, resetZoomBtn });
         
         if (zoomInBtn) {
-            zoomInBtn.onclick = () => this.zoomIn();
-        }
-        if (zoomOutBtn) {
-            zoomOutBtn.onclick = () => this.zoomOut();
-        }
-        if (resetZoomBtn) {
-            resetZoomBtn.onclick = () => this.resetZoom();
+            zoomInBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                console.log('🔍 Zoom In clicked');
+                this.zoomIn();
+            });
         }
         
-        // Mausrad-Zoom für Map-Viewport
+        if (zoomOutBtn) {
+            zoomOutBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                console.log('🔍 Zoom Out clicked');
+                this.zoomOut();
+            });
+        }
+        
+        if (resetZoomBtn) {
+            resetZoomBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                console.log('🔍 Zoom Reset clicked');
+                this.resetZoom();
+            });
+        }
+        
+        // Mausrad-Zoom
         const mapViewport = document.getElementById('mapViewport');
         if (mapViewport) {
             mapViewport.addEventListener('wheel', (e) => {
                 e.preventDefault();
-                
                 if (e.deltaY > 0) {
                     this.zoomOut();
                 } else {
@@ -499,7 +516,7 @@ class StrategyGame {
         // Tastatur-Shortcuts
         document.addEventListener('keydown', (e) => {
             if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
-                return; // Ignoriere wenn in Input-Feldern
+                return;
             }
             
             switch (e.key) {
@@ -518,58 +535,38 @@ class StrategyGame {
                     break;
             }
         });
+        
+        console.log('✅ Zoom controls initialized successfully');
     }
     
     zoomIn() {
-        console.log('Zooming in...');
-        
-        // Prüfe ob GameRenderer existiert
-        if (this.gameRenderer && typeof this.gameRenderer.zoomIn === 'function') {
-            this.gameRenderer.zoomIn();
-            return;
-        }
-        
-        // Fallback: Grid-basiertes Zoom
+        console.log('🔍 Zooming in... Current scale:', this.mapScale);
         const newScale = Math.min(this.maxScale, this.mapScale + this.zoomStep);
         if (newScale !== this.mapScale) {
             this.mapScale = newScale;
             this.applyMapZoom();
             this.updateZoomDisplay();
+            console.log('✅ Zoomed to:', Math.round(this.mapScale * 100) + '%');
         }
     }
     
     zoomOut() {
-        console.log('Zooming out...');
-        
-        // Prüfe ob GameRenderer existiert
-        if (this.gameRenderer && typeof this.gameRenderer.zoomOut === 'function') {
-            this.gameRenderer.zoomOut();
-            return;
-        }
-        
-        // Fallback: Grid-basiertes Zoom
+        console.log('🔍 Zooming out... Current scale:', this.mapScale);
         const newScale = Math.max(this.minScale, this.mapScale - this.zoomStep);
         if (newScale !== this.mapScale) {
             this.mapScale = newScale;
             this.applyMapZoom();
             this.updateZoomDisplay();
+            console.log('✅ Zoomed to:', Math.round(this.mapScale * 100) + '%');
         }
     }
     
     resetZoom() {
-        console.log('Resetting zoom...');
-        
-        // Prüfe ob GameRenderer existiert
-        if (this.gameRenderer && this.gameRenderer.zoom !== undefined) {
-            this.gameRenderer.zoom = 1.0;
-            this.gameRenderer.render();
-            return;
-        }
-        
-        // Fallback: Grid-basiertes Zoom
+        console.log('🔍 Resetting zoom...');
         this.mapScale = 1.0;
         this.applyMapZoom();
         this.updateZoomDisplay();
+        console.log('✅ Zoom reset to 100%');
     }
     
     applyMapZoom() {
@@ -577,42 +574,38 @@ class StrategyGame {
         if (mapGrid) {
             mapGrid.style.transform = `scale(${this.mapScale})`;
             mapGrid.style.transformOrigin = 'center center';
-            
-            // Smooth transitions
             mapGrid.style.transition = 'transform 0.2s ease';
-            
-            console.log(`Map zoom applied: ${Math.round(this.mapScale * 100)}%`);
         }
     }
     
     updateZoomDisplay() {
-        // Update Zoom-Info falls vorhanden
+        // Erstelle oder aktualisiere Zoom-Display
         let zoomInfo = document.getElementById('zoomInfo');
         if (!zoomInfo) {
-            // Erstelle Zoom-Info Element
             zoomInfo = document.createElement('div');
             zoomInfo.id = 'zoomInfo';
             zoomInfo.style.cssText = `
                 position: absolute;
                 bottom: 10px;
                 left: 10px;
-                background: rgba(0,0,0,0.7);
+                background: rgba(0,0,0,0.8);
                 color: white;
                 padding: 5px 10px;
                 border-radius: 4px;
                 font-size: 12px;
-                z-index: 40;
+                z-index: 90;
                 pointer-events: none;
+                transition: opacity 0.3s ease;
             `;
             document.querySelector('.map-container').appendChild(zoomInfo);
         }
         
         const zoomPercent = Math.round(this.mapScale * 100);
         zoomInfo.textContent = `Zoom: ${zoomPercent}%`;
-        
-        // Auto-hide nach 2 Sekunden
-        clearTimeout(this.zoomDisplayTimeout);
         zoomInfo.style.opacity = '1';
+        
+        // Auto-fade nach 2 Sekunden
+        clearTimeout(this.zoomDisplayTimeout);
         this.zoomDisplayTimeout = setTimeout(() => {
             zoomInfo.style.opacity = '0.3';
         }, 2000);

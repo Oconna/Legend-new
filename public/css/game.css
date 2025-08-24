@@ -135,15 +135,6 @@ body {
     background: #f39c12 !important;
 }
 
-/* Game Canvas Area */
-.game-canvas-area {
-    flex: 1;
-    position: relative;
-    background: #34495e;
-    display: flex;
-    flex-direction: column;
-}
-
 /* Game Toolbar */
 .game-toolbar {
     background: rgba(0, 0, 0, 0.8);
@@ -264,8 +255,10 @@ body {
 }
 
 .map-tile.selected {
-    box-shadow: 0 0 0 3px #f39c12;
-    z-index: 15;
+    box-shadow: 0 0 0 3px #ffff00, 0 0 0 6px rgba(255, 255, 0, 0.4);
+    z-index: 12;
+    position: relative;
+    border: 2px solid #ffff00;
 }
 
 .map-tile.possible-move {

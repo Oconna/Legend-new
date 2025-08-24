@@ -227,6 +227,13 @@ body {
     background: #f8f9fa;
 }
 
+.map-viewport {
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    position: relative;
+}
+
 #mapGrid {
     display: grid;
     gap: 1px;
@@ -260,6 +267,30 @@ body {
     position: relative;
     border: 2px solid #ffff00;
 }
+
+.map-tile.highlighted {
+    animation: highlightPulse 2s ease-in-out;
+    box-shadow: 0 0 0 4px #00ff00, 0 0 0 8px rgba(0, 255, 0, 0.3);
+    z-index: 15;
+    position: relative;
+}
+
+        @keyframes highlightPulse {
+            0% {
+                box-shadow: 0 0 0 2px #00ff00, 0 0 0 4px rgba(0, 255, 0, 0.8);
+                transform: scale(1);
+            }
+
+            50% {
+                box-shadow: 0 0 0 6px #00ff00, 0 0 0 12px rgba(0, 255, 0, 0.4);
+                transform: scale(1.05);
+            }
+
+            100% {
+                box-shadow: 0 0 0 4px #00ff00, 0 0 0 8px rgba(0, 255, 0, 0.3);
+                transform: scale(1);
+            }
+        }
 
 .map-tile.possible-move {
     box-shadow: 0 0 0 2px #2ecc71;

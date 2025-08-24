@@ -973,19 +973,6 @@ input:focus, select:focus {
     }
 }
 
-/* Game Page Styles */
-.game-body {
-    background: #2c3e50;
-    color: white;
-    overflow: hidden;
-}
-
-.game-container {
-    height: 100vh;
-    display: flex;
-    flex-direction: column;
-}
-
 .game-header-bar {
     background: #34495e;
     padding: 1rem;
@@ -1060,25 +1047,6 @@ input:focus, select:focus {
     border-bottom: 1px solid #4a5f7a;
     padding-bottom: 0.5rem;
 }
-
-/* Map Container */
-.map-container {
-    position: relative;
-    background: #1a252f;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-}
-
-.map-controls {
-    position: absolute;
-    top: 10px;
-    right: 10px;
-    z-index: 50;
-    display: flex;
-    gap: 5px;
-}
-
 
 .control-btn {
     padding: 8px 12px;

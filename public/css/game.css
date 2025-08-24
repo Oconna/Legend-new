@@ -166,6 +166,30 @@ body {
     color: #ecf0f1;
 }
 
+.control-btn {
+    padding: 8px 12px !important;
+    border: none !important;
+    background: #667eea !important;
+    color: white !important;
+    border-radius: 4px !important;
+    cursor: pointer !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    transition: all 0.2s ease !important;
+    border: 1px solid rgba(255,255,255,0.2) !important;
+}
+
+.control-btn:hover {
+    background: #5a6fd8 !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.3) !important;
+}
+
+.control-btn:active {
+    transform: translateY(0) !important;
+    background: #4a5ab8 !important;
+}
+
 .zoom-controls {
     display: flex;
     gap: 5px;
@@ -207,9 +231,9 @@ body {
 /* Map Grid (Fallback für 2D-Darstellung) */
 .map-container {
     flex: 1;
-    overflow: auto;
-    background: #2c3e50;
     position: relative;
+    overflow: hidden;
+    background: #f8f9fa;
 }
 
 #mapGrid {

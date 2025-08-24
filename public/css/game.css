@@ -192,26 +192,6 @@ body {
     background: #4a5ab8 !important;
 }
 
-.zoom-controls {
-    display: flex;
-    gap: 5px;
-}
-
-.zoom-btn {
-    background: rgba(255, 255, 255, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    color: white;
-    padding: 5px 10px;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 12px;
-    transition: all 0.3s ease;
-}
-
-.zoom-btn:hover {
-    background: rgba(255, 255, 255, 0.3);
-}
-
 /* Canvas Container */
 .canvas-container {
     flex: 1;

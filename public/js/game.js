@@ -553,6 +553,7 @@ initializeZoomControls() {
     
     const zoomInBtn = document.getElementById('zoomInBtn');
     const zoomOutBtn = document.getElementById('zoomOutBtn');
+    const zoomToActiveTileBtn = document.getElementById('zoomToActiveTileBtn');
     const resetZoomBtn = document.getElementById('resetZoomBtn');
     const centerMapBtn = document.getElementById('centerMapBtn');
     const mapViewport = document.getElementById('mapViewport');
@@ -562,6 +563,13 @@ initializeZoomControls() {
         zoomInBtn.addEventListener('click', (e) => {
             e.preventDefault();
             this.zoomIn();
+        });
+    }
+	
+    if (zoomToActiveTileBtn) {
+        zoomToActiveTileBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            this.zoomToActiveTile();
         });
     }
     

@@ -241,7 +241,7 @@ body {
         /* Map Controls erweitert */
         .map-controls {
             position: absolute;
-            bottom: 10px;
+            top: 10px;
             right: 10px;
             z-index: 100;
             display: flex;

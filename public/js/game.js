@@ -266,8 +266,27 @@ class StrategyGame {
         tile.dataset.y = y;
         tile.dataset.tileId = tileData.id;
 
-        // Terrain Farbe
-        tile.style.backgroundColor = tileData.terrain_color || '#90EE90';
+        // Versuche Terrain-Grafik zu laden
+        if (tileData.terrain_image) {
+            const terrainImg = document.createElement('img');
+            terrainImg.src = `/assets/images/${tileData.terrain_image}`;
+            terrainImg.className = 'terrain-image';
+            terrainImg.style.width = '100%';
+            terrainImg.style.height = '100%';
+            terrainImg.style.objectFit = 'cover';
+            
+            // Fallback zu Farbe bei Ladeproblemen
+            terrainImg.onerror = () => {
+                console.warn(`Terrain-Bild nicht gefunden: ${tileData.terrain_image}`);
+                tile.style.backgroundColor = tileData.terrain_color || '#90EE90';
+                terrainImg.style.display = 'none';
+            };
+            
+            tile.appendChild(terrainImg);
+        } else {
+            // Fallback: Terrain Farbe verwenden
+            tile.style.backgroundColor = tileData.terrain_color || '#90EE90';
+        }
 
         // Click Handler
         tile.addEventListener('click', () => this.handleTileClick(x, y, tileData));
@@ -279,20 +298,39 @@ class StrategyGame {
         if (tileData.building_type_id) {
             const building = document.createElement('div');
             building.className = 'tile-building';
-            building.style.backgroundColor = tileData.building_color || '#8B4513';
             
-            // Gebäude-Symbol
-            building.textContent = tileData.building_name === 'Stadt' ? '🏘️' : '🏰';
-            
-            // Besitzer-Indikator
-            if (tileData.owner_player_id) {
-                building.style.borderColor = this.getPlayerColor(tileData.owner_player_id);
+            // Versuche Gebäude-Grafik zu laden
+            if (tileData.building_image) {
+                const buildingImg = document.createElement('img');
+                buildingImg.src = `/assets/images/${tileData.building_image}`;
+                buildingImg.className = 'building-image';
+                buildingImg.style.width = '100%';
+                buildingImg.style.height = '100%';
+                buildingImg.style.objectFit = 'contain';
+                
+                // Fallback bei Ladeproblemen
+                buildingImg.onerror = () => {
+                    console.warn(`Gebäude-Bild nicht gefunden: ${tileData.building_image}`);
+                    building.style.backgroundColor = tileData.building_color || '#8B4513';
+                    building.textContent = tileData.building_name === 'Stadt' ? '🏘️' : '🏰';
+                    buildingImg.style.display = 'none';
+                };
+                
+                building.appendChild(buildingImg);
+            } else {
+                // Fallback: Farbe und Symbol
+                building.style.backgroundColor = tileData.building_color || '#8B4513';
+                building.textContent = tileData.building_name === 'Stadt' ? '🏘️' : '🏰';
             }
-
+            
+            // Besitzer-Rand anzeigen
+            if (tileData.owner_name) {
+                building.style.border = `3px solid ${tileData.owner_race_color || '#000'}`;
+                building.title = `Besitzer: ${tileData.owner_name}`;
+            }
+            
             tile.appendChild(building);
         }
-
-        // TODO: Einheiten anzeigen (wird später implementiert)
 
         return tile;
     }

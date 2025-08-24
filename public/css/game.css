@@ -1,0 +1,648 @@
+/* public/css/game.css - Vollständige Game-Styles */
+
+/* Reset and Base Styles */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #333;
+    min-height: 100vh;
+    overflow: hidden;
+}
+
+/* Game Container Layout */
+.game-container {
+    display: flex;
+    height: 100vh;
+    width: 100vw;
+}
+
+/* Game Sidebar */
+.game-sidebar {
+    width: 300px;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border-right: 1px solid rgba(255, 255, 255, 0.2);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+}
+
+.sidebar-section {
+    padding: 15px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.sidebar-section h3 {
+    margin-bottom: 10px;
+    color: #4a5568;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+/* Game Info Section */
+.game-info {
+    background: linear-gradient(45deg, #667eea, #764ba2);
+    color: white;
+}
+
+.game-info h2 {
+    font-size: 18px;
+    margin-bottom: 10px;
+}
+
+.info-item {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 5px;
+    font-size: 14px;
+}
+
+/* Players List */
+.players-list {
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.player-item {
+    display: flex;
+    align-items: center;
+    padding: 8px;
+    margin-bottom: 5px;
+    background: rgba(102, 126, 234, 0.1);
+    border-radius: 6px;
+    font-size: 14px;
+}
+
+.player-color {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    margin-right: 8px;
+    border: 2px solid white;
+}
+
+.current-turn {
+    background: rgba(76, 175, 80, 0.2);
+    border: 1px solid #4caf50;
+}
+
+/* Action Buttons */
+.action-buttons {
+    padding: 20px;
+}
+
+.action-buttons .btn {
+    width: 100%;
+    margin-bottom: 8px;
+    padding: 12px;
+    background: #3498db;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background 0.3s ease;
+}
+
+.action-buttons .btn:hover {
+    background: #2980b9;
+}
+
+.action-buttons .btn:disabled {
+    background: #bdc3c7;
+    cursor: not-allowed;
+}
+
+.btn-primary {
+    background: #3498db !important;
+}
+
+.btn-success {
+    background: #2ecc71 !important;
+}
+
+.btn-danger {
+    background: #e74c3c !important;
+}
+
+.btn-warning {
+    background: #f39c12 !important;
+}
+
+/* Game Canvas Area */
+.game-canvas-area {
+    flex: 1;
+    position: relative;
+    background: #34495e;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Game Toolbar */
+.game-toolbar {
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 10px 15px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.toolbar-section {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.toolbar-info {
+    font-size: 14px;
+    color: #ecf0f1;
+}
+
+.zoom-controls {
+    display: flex;
+    gap: 5px;
+}
+
+.zoom-btn {
+    background: rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: white;
+    padding: 5px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.3s ease;
+}
+
+.zoom-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+/* Canvas Container */
+.canvas-container {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+}
+
+#gameCanvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    cursor: grab;
+}
+
+#gameCanvas:active {
+    cursor: grabbing;
+}
+
+/* Map Grid (Fallback für 2D-Darstellung) */
+.map-container {
+    flex: 1;
+    overflow: auto;
+    background: #2c3e50;
+    position: relative;
+}
+
+#mapGrid {
+    display: grid;
+    gap: 1px;
+    background: #34495e;
+    padding: 10px;
+    min-width: fit-content;
+    min-height: fit-content;
+}
+
+/* Map Tiles */
+.map-tile {
+    position: relative;
+    width: 48px;
+    height: 48px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    cursor: pointer;
+    overflow: hidden;
+    background-color: #90EE90; /* Fallback für Gras */
+    transition: all 0.2s ease;
+}
+
+.map-tile:hover {
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.8);
+    z-index: 10;
+    transform: scale(1.05);
+}
+
+.map-tile.selected {
+    box-shadow: 0 0 0 3px #f39c12;
+    z-index: 15;
+}
+
+.map-tile.possible-move {
+    box-shadow: 0 0 0 2px #2ecc71;
+    z-index: 12;
+}
+
+.map-tile.possible-attack {
+    box-shadow: 0 0 0 2px #e74c3c;
+    z-index: 12;
+}
+
+/* Terrain Graphics Support */
+.map-tile .terrain-image {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    pointer-events: none;
+    z-index: 1;
+}
+
+/* Building Elements */
+.tile-building {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    right: 2px;
+    bottom: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2;
+    border-radius: 2px;
+    font-size: 20px;
+}
+
+.tile-building .building-image {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    pointer-events: none;
+}
+
+/* Unit Elements */
+.tile-unit {
+    position: absolute;
+    top: 4px;
+    left: 4px;
+    right: 4px;
+    bottom: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 3;
+    border-radius: 50%;
+    font-size: 16px;
+    font-weight: bold;
+    color: white;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.7);
+}
+
+/* Minimap */
+.minimap-container {
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    width: 200px;
+    height: 200px;
+    background: rgba(0, 0, 0, 0.8);
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+#minimap {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+/* Loading States */
+.loading-image {
+    background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(255, 255, 255, 0.3),
+        transparent
+    );
+    background-size: 200% 100%;
+    animation: loading-shimmer 1.5s infinite;
+}
+
+@keyframes loading-shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+}
+
+.image-error {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    color: #666;
+    background-color: #f0f0f0;
+}
+
+.image-error::before {
+    content: "❌";
+    margin-right: 2px;
+}
+
+/* Game UI Overlays */
+.game-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.overlay-content {
+    background: white;
+    padding: 2rem;
+    border-radius: 12px;
+    text-align: center;
+    max-width: 500px;
+    width: 90%;
+}
+
+.overlay-content h2 {
+    color: #2c3e50;
+    margin-bottom: 1rem;
+}
+
+.overlay-content p {
+    color: #7f8c8d;
+    margin-bottom: 1.5rem;
+}
+
+/* Chat Integration */
+.game-chat {
+    background: rgba(255, 255, 255, 0.95);
+    border-top: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.chat-messages {
+    height: 150px;
+    overflow-y: auto;
+    padding: 10px;
+    font-size: 13px;
+}
+
+.chat-message {
+    margin-bottom: 5px;
+    word-wrap: break-word;
+}
+
+.chat-input-container {
+    padding: 10px;
+    display: flex;
+    gap: 5px;
+}
+
+.chat-input {
+    flex: 1;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 13px;
+}
+
+.chat-send-btn {
+    padding: 8px 15px;
+    background: #3498db;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+}
+
+.chat-send-btn:hover {
+    background: #2980b9;
+}
+
+/* Turn Indicator */
+.turn-indicator {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 10px 20px;
+    border-radius: 20px;
+    font-weight: bold;
+    z-index: 500;
+}
+
+.turn-indicator.current-player {
+    background: rgba(46, 204, 113, 0.9);
+}
+
+.turn-indicator.waiting {
+    background: rgba(241, 196, 15, 0.9);
+    color: #333;
+}
+
+/* Notifications */
+.game-notification {
+    position: fixed;
+    top: 80px;
+    right: 20px;
+    background: rgba(0, 0, 0, 0.9);
+    color: white;
+    padding: 15px 20px;
+    border-radius: 8px;
+    max-width: 300px;
+    z-index: 600;
+    animation: slideInRight 0.3s ease;
+}
+
+.game-notification.success {
+    background: rgba(46, 204, 113, 0.9);
+}
+
+.game-notification.error {
+    background: rgba(231, 76, 60, 0.9);
+}
+
+.game-notification.warning {
+    background: rgba(243, 156, 18, 0.9);
+    color: #333;
+}
+
+@keyframes slideInRight {
+    from {
+        opacity: 0;
+        transform: translateX(100%);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+/* Terrain-specific Fallback Colors */
+.terrain-grass { background-color: #90EE90; }
+.terrain-mountain { background-color: #8B4513; }
+.terrain-swamp { background-color: #556B2F; }
+.terrain-water { background-color: #4169E1; }
+.terrain-forest { background-color: #228B22; }
+.terrain-desert { background-color: #F4A460; }
+.terrain-snow { background-color: #F0F8FF; }
+
+/* Building-specific Fallback Colors */
+.building-city { background-color: #FFD700; }
+.building-castle { background-color: #708090; }
+
+/* Responsive Design */
+@media (max-width: 1200px) {
+    .game-sidebar {
+        width: 250px;
+    }
+}
+
+@media (max-width: 768px) {
+    .game-container {
+        flex-direction: column;
+    }
+    
+    .game-sidebar {
+        width: 100%;
+        height: auto;
+        max-height: 200px;
+        order: 2;
+    }
+    
+    .game-canvas-area {
+        order: 1;
+        height: calc(100vh - 200px);
+    }
+    
+    .map-tile {
+        width: 32px;
+        height: 32px;
+    }
+    
+    .tile-building {
+        top: 1px;
+        left: 1px;
+        right: 1px;
+        bottom: 1px;
+        font-size: 14px;
+    }
+    
+    .minimap-container {
+        width: 120px;
+        height: 120px;
+        bottom: 10px;
+        right: 10px;
+    }
+    
+    .game-toolbar {
+        padding: 8px 10px;
+        font-size: 12px;
+    }
+    
+    .toolbar-section {
+        gap: 10px;
+    }
+    
+    .zoom-btn {
+        padding: 4px 8px;
+        font-size: 11px;
+    }
+}
+
+@media (max-width: 480px) {
+    .game-sidebar {
+        max-height: 150px;
+    }
+    
+    .sidebar-section {
+        padding: 10px;
+    }
+    
+    .sidebar-section h3 {
+        font-size: 14px;
+    }
+    
+    .player-item {
+        padding: 6px;
+        font-size: 12px;
+    }
+    
+    .action-buttons {
+        padding: 10px;
+    }
+    
+    .action-buttons .btn {
+        padding: 8px;
+        font-size: 12px;
+        margin-bottom: 5px;
+    }
+    
+    .map-tile {
+        width: 24px;
+        height: 24px;
+    }
+    
+    .tile-building {
+        font-size: 10px;
+    }
+    
+    .minimap-container {
+        width: 80px;
+        height: 80px;
+    }
+}
+
+/* Canvas Optimizations */
+canvas {
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+}
+
+/* Smooth Transitions */
+.game-container,
+.game-sidebar,
+.game-canvas-area {
+    transition: all 0.3s ease;
+}
+
+/* Debug Styles (nur während Entwicklung) */
+.debug .map-tile {
+    border: 1px solid red !important;
+}
+
+.debug .tile-building {
+    border: 1px solid blue !important;
+}
+
+.debug .tile-unit {
+    border: 1px solid green !important;
+}
+
+/* High DPI Display Support */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+    .map-tile,
+    .tile-building,
+    .tile-unit {
+        image-rendering: -webkit-optimize-contrast;
+    }
+}

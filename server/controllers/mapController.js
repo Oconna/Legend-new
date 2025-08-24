@@ -430,9 +430,11 @@ class MapController {
                     gm.*,
                     tt.name as terrain_name,
                     tt.color_hex as terrain_color,
+                    tt.image_filename as terrain_image,
                     tt.movement_cost,
                     bt.name as building_name,
                     bt.color_hex as building_color,
+                    bt.image_filename as building_image,
                     bt.gold_income,
                     gp.player_name as owner_name,
                     r.color_hex as owner_race_color

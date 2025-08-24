@@ -26,9 +26,9 @@ class GameRenderer {
         this.possibleMoves = [];
         this.possibleAttacks = [];
         
-        // Rendering-Cache
-        this.terrainCache = new Map();
-        this.unitCache = new Map();
+        // Grafik-Cache für bessere Performance
+        this.imageCache = new Map();
+        this.loadingImages = new Set();
         
         this.setupEventHandlers();
     }
@@ -46,15 +46,15 @@ class GameRenderer {
     }
 
     // Spielzustand aktualisieren
-    updateGameState(gameState) {
+    async updateGameState(gameState) {
         this.gameState = gameState;
         this.mapData = gameState.map;
         this.units = gameState.units;
-        this.render();
+        await this.render(); // Jetzt async
     }
 
     // Hauptrender-Methode
-    render() {
+    async render() {
         if (!this.gameState) return;
         
         // Canvas leeren
@@ -68,9 +68,9 @@ class GameRenderer {
         // Sichtbaren Bereich berechnen
         const viewBounds = this.getViewBounds();
         
-        // Rendern in Schichten
-        this.renderTerrain(viewBounds);
-        this.renderBuildings(viewBounds);
+        // Rendern in Schichten (jetzt async)
+        await this.renderTerrain(viewBounds);
+        await this.renderBuildings(viewBounds);
         this.renderPossibleMoves();
         this.renderPossibleAttacks();
         this.renderUnits(viewBounds);
@@ -80,9 +80,57 @@ class GameRenderer {
         
         this.ctx.restore();
     }
+	
+    async loadImage(filename) {
+        if (!filename) return null;
+        
+        // Prüfe Cache
+        if (this.imageCache.has(filename)) {
+            return this.imageCache.get(filename);
+        }
+        
+        // Prüfe ob bereits geladen wird
+        if (this.loadingImages.has(filename)) {
+            // Warte bis Bild geladen ist
+            while (this.loadingImages.has(filename)) {
+                await new Promise(resolve => setTimeout(resolve, 50));
+            }
+            return this.imageCache.get(filename);
+        }
+        
+        this.loadingImages.add(filename);
+        
+        try {
+            const img = new Image();
+            const imagePath = `/assets/images/${filename}`;
+            
+            return new Promise((resolve, reject) => {
+                img.onload = () => {
+                    this.imageCache.set(filename, img);
+                    this.loadingImages.delete(filename);
+                    console.log(`✅ Bild geladen: ${filename}`);
+                    resolve(img);
+                };
+                
+                img.onerror = () => {
+                    console.warn(`❌ Bild nicht gefunden: ${filename}`);
+                    this.loadingImages.delete(filename);
+                    this.imageCache.set(filename, null); // Cache auch Fehler
+                    resolve(null);
+                };
+                
+                img.src = imagePath;
+            });
+        } catch (error) {
+            console.error(`Fehler beim Laden des Bildes ${filename}:`, error);
+            this.loadingImages.delete(filename);
+            return null;
+        }
+    }
 
     // Terrain rendern
-    renderTerrain(viewBounds) {
+    // Terrain rendern - ERWEITERT für Grafiken
+    async renderTerrain(viewBounds) {
         if (!this.mapData) return;
         
         for (const tile of this.mapData) {
@@ -95,9 +143,22 @@ class GameRenderer {
             const x = tile.x_coordinate * this.tileSize;
             const y = tile.y_coordinate * this.tileSize;
             
-            // Terrain-Farbe
-            this.ctx.fillStyle = tile.terrain_color || '#90EE90';
-            this.ctx.fillRect(x, y, this.tileSize, this.tileSize);
+            // Versuche Terrain-Bild zu laden
+            if (tile.terrain_image) {
+                const img = await this.loadImage(tile.terrain_image);
+                if (img) {
+                    // Zeichne Bild
+                    this.ctx.drawImage(img, x, y, this.tileSize, this.tileSize);
+                } else {
+                    // Fallback: Farbe verwenden
+                    this.ctx.fillStyle = tile.terrain_color || '#90EE90';
+                    this.ctx.fillRect(x, y, this.tileSize, this.tileSize);
+                }
+            } else {
+                // Fallback: Farbe verwenden
+                this.ctx.fillStyle = tile.terrain_color || '#90EE90';
+                this.ctx.fillRect(x, y, this.tileSize, this.tileSize);
+            }
             
             // Terrain-Typ-Text (bei großem Zoom)
             if (this.zoom > 1.5) {
@@ -118,8 +179,8 @@ class GameRenderer {
         }
     }
 
-    // Gebäude rendern
-    renderBuildings(viewBounds) {
+    // Gebäude rendern - ERWEITERT für Grafiken
+    async renderBuildings(viewBounds) {
         if (!this.mapData) return;
         
         for (const tile of this.mapData) {
@@ -133,9 +194,21 @@ class GameRenderer {
             const x = tile.x_coordinate * this.tileSize;
             const y = tile.y_coordinate * this.tileSize;
             
-            // Gebäude-Hintergrund
-            this.ctx.fillStyle = tile.building_color || '#FFD700';
-            this.ctx.fillRect(x + 2, y + 2, this.tileSize - 4, this.tileSize - 4);
+            // Versuche Gebäude-Bild zu laden
+            if (tile.building_image) {
+                const img = await this.loadImage(tile.building_image);
+                if (img) {
+                    // Zeichne Bild (etwas kleiner als Tile für bessere Darstellung)
+                    const buildingSize = this.tileSize - 4;
+                    this.ctx.drawImage(img, x + 2, y + 2, buildingSize, buildingSize);
+                } else {
+                    // Fallback: Farbiges Rechteck
+                    this.renderBuildingFallback(tile, x, y);
+                }
+            } else {
+                // Fallback: Farbiges Rechteck
+                this.renderBuildingFallback(tile, x, y);
+            }
             
             // Besitzer-Rand
             if (tile.owner_player_id) {
@@ -146,16 +219,23 @@ class GameRenderer {
                     this.ctx.strokeRect(x + 1, y + 1, this.tileSize - 2, this.tileSize - 2);
                 }
             }
-            
-            // Gebäude-Symbol
-            this.ctx.fillStyle = 'black';
-            this.ctx.font = 'bold 16px Arial';
-            this.ctx.textAlign = 'center';
-            this.ctx.textBaseline = 'middle';
-            
-            const symbol = tile.building_type_id === 1 ? '🏰' : '🏛️';
-            this.ctx.fillText(symbol, x + this.tileSize / 2, y + this.tileSize / 2);
         }
+    }
+
+    // Fallback-Rendering für Gebäude ohne Grafiken
+    renderBuildingFallback(tile, x, y) {
+        // Gebäude-Hintergrund
+        this.ctx.fillStyle = tile.building_color || '#FFD700';
+        this.ctx.fillRect(x + 2, y + 2, this.tileSize - 4, this.tileSize - 4);
+        
+        // Gebäude-Symbol
+        this.ctx.fillStyle = 'black';
+        this.ctx.font = 'bold 16px Arial';
+        this.ctx.textAlign = 'center';
+        this.ctx.textBaseline = 'middle';
+        
+        const symbol = tile.building_type_id === 1 ? '🏘️' : '🏰'; // Stadt vs Burg
+        this.ctx.fillText(symbol, x + this.tileSize / 2, y + this.tileSize / 2);
     }
 
     // Einheiten rendern
@@ -629,16 +709,16 @@ class GameRenderer {
     }
 
     getViewBounds() {
-        const leftWorld = -this.offsetX;
-        const topWorld = -this.offsetY;
-        const rightWorld = leftWorld + (this.canvas.width / this.zoom);
-        const bottomWorld = topWorld + (this.canvas.height / this.zoom);
-        
+        const worldLeft = -this.offsetX / this.zoom;
+        const worldTop = -this.offsetY / this.zoom;
+        const worldRight = worldLeft + this.canvas.width / this.zoom;
+        const worldBottom = worldTop + this.canvas.height / this.zoom;
+
         return {
-            minX: Math.floor(leftWorld / this.tileSize) - 1,
-            minY: Math.floor(topWorld / this.tileSize) - 1,
-            maxX: Math.ceil(rightWorld / this.tileSize) + 1,
-            maxY: Math.ceil(bottomWorld / this.tileSize) + 1
+            minX: Math.floor(worldLeft / this.tileSize) - 1,
+            minY: Math.floor(worldTop / this.tileSize) - 1,
+            maxX: Math.ceil(worldRight / this.tileSize) + 1,
+            maxY: Math.ceil(worldBottom / this.tileSize) + 1
         };
     }
 

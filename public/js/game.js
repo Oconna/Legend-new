@@ -553,37 +553,41 @@ initializeZoomControls() {
     
     const zoomInBtn = document.getElementById('zoomInBtn');
     const zoomOutBtn = document.getElementById('zoomOutBtn');
-    const zoomToActiveTileBtn = document.getElementById('zoomToActiveTileBtn');
     const resetZoomBtn = document.getElementById('resetZoomBtn');
     const centerMapBtn = document.getElementById('centerMapBtn');
     const mapViewport = document.getElementById('mapViewport');
     
-    // Button Event Listeners
+    // Button Event Listeners - verwenden jetzt die *AtViewportCenter Versionen
     if (zoomInBtn) {
         zoomInBtn.addEventListener('click', (e) => {
             e.preventDefault();
-            this.zoomIn();
-        });
-    }
-	
-    if (zoomToActiveTileBtn) {
-        zoomToActiveTileBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            this.zoomToActiveTile();
+            if (this.activeTile) {
+                this.zoomIn(); // Verwendet automatisch activeTile als Zentrum
+            } else {
+                this.zoomInAtViewportCenter();
+            }
         });
     }
     
     if (zoomOutBtn) {
         zoomOutBtn.addEventListener('click', (e) => {
             e.preventDefault();
-            this.zoomOut();
+            if (this.activeTile) {
+                this.zoomOut(); // Verwendet automatisch activeTile als Zentrum
+            } else {
+                this.zoomOutAtViewportCenter();
+            }
         });
     }
     
     if (resetZoomBtn) {
         resetZoomBtn.addEventListener('click', (e) => {
             e.preventDefault();
-            this.resetZoom();
+            if (this.activeTile) {
+                this.resetZoom(); // Verwendet automatisch activeTile als Zentrum
+            } else {
+                this.resetZoomAtViewportCenter();
+            }
         });
     }
     
@@ -603,12 +607,17 @@ initializeZoomControls() {
         mapViewport.addEventListener('wheel', (e) => {
             e.preventDefault();
             
-            const mousePos = this.getMousePosition(e);
+            // Mausposition relativ zum Viewport
+            const rect = mapViewport.getBoundingClientRect();
+            const mousePoint = {
+                x: e.clientX - rect.left,
+                y: e.clientY - rect.top
+            };
             
             if (e.deltaY > 0) {
-                this.zoomOut(mousePos);
+                this.zoomOut(mousePoint);
             } else {
-                this.zoomIn(mousePos);
+                this.zoomIn(mousePoint);
             }
         }, { passive: false });
     }
@@ -623,15 +632,27 @@ initializeZoomControls() {
             case '+':
             case '=':
                 e.preventDefault();
-                this.zoomIn();
+                if (this.activeTile) {
+                    this.zoomIn(); // Verwendet activeTile als Zentrum
+                } else {
+                    this.zoomInAtViewportCenter();
+                }
                 break;
             case '-':
                 e.preventDefault();
-                this.zoomOut();
+                if (this.activeTile) {
+                    this.zoomOut(); // Verwendet activeTile als Zentrum  
+                } else {
+                    this.zoomOutAtViewportCenter();
+                }
                 break;
             case '0':
                 e.preventDefault();
-                this.resetZoom();
+                if (this.activeTile) {
+                    this.resetZoom(); // Verwendet activeTile als Zentrum
+                } else {
+                    this.resetZoomAtViewportCenter();
+                }
                 break;
             case 'c':
             case 'C':
@@ -639,6 +660,11 @@ initializeZoomControls() {
                 if (this.activeTile) {
                     this.centerOnTile(this.activeTile.x, this.activeTile.y);
                 }
+                break;
+            case 't':
+            case 'T':
+                e.preventDefault();
+                this.zoomToActiveTile();
                 break;
         }
     });
@@ -694,15 +720,17 @@ zoomToActiveTile() {
     
     console.log('🎯 Zooming to active tile:', this.activeTile);
     
-    // Erst auf das aktive Tile zentrieren
-    this.centerOnTile(this.activeTile.x, this.activeTile.y);
+    // Zuerst auf das Tile zentrieren (ohne Zoom-Änderung)
+    this.centerOnTile(this.activeTile.x, this.activeTile.y, false);
     
-    // Dann zoomen falls nötig
-    if (this.mapScale < 1.0) {
-        setTimeout(() => {
-            this.setZoomLevel(1.0, this.getActiveTileCenter());
-        }, 300);
-    }
+    // Dann zoomen mit dem Tile als Zentrum (nach kurzer Pause)
+    setTimeout(() => {
+        const tileCenter = this.getTileScreenPosition(this.activeTile.x, this.activeTile.y);
+        this.setZoomLevel(1.0, { 
+            x: tileCenter.screenX, 
+            y: tileCenter.screenY 
+        });
+    }, 50);
 }
 
     // Hauptzoom-Funktion mit variabler Position
@@ -752,6 +780,34 @@ zoomToActiveTile() {
             console.log('✅ Zoomed to:', Math.round(this.mapScale * 100) + '%');
         }, 0);
     }
+	
+// Einfache Hilfsfunktionen für Button/Tastatur-Zoom
+zoomInAtViewportCenter() {
+    const mapViewport = document.getElementById('mapViewport');
+    const centerPoint = {
+        x: mapViewport.clientWidth / 2,
+        y: mapViewport.clientHeight / 2
+    };
+    this.zoomIn(centerPoint);
+}
+
+zoomOutAtViewportCenter() {
+    const mapViewport = document.getElementById('mapViewport');
+    const centerPoint = {
+        x: mapViewport.clientWidth / 2,
+        y: mapViewport.clientHeight / 2
+    };
+    this.zoomOut(centerPoint);
+}
+
+resetZoomAtViewportCenter() {
+    const mapViewport = document.getElementById('mapViewport');
+    const centerPoint = {
+        x: mapViewport.clientWidth / 2,
+        y: mapViewport.clientHeight / 2
+    };
+    this.resetZoom(centerPoint);
+}
 
     // Auf ein bestimmtes Tile zentrieren
 centerOnTile(tileX, tileY, smooth = true) {
@@ -780,8 +836,22 @@ centerOnTile(tileX, tileY, smooth = true) {
     const targetScrollTop = scaledTileCenterY - viewportCenterY;
     
     // Scroll-Position auf gültige Bereiche beschränken
-    const finalScrollLeft = Math.max(0, targetScrollLeft);
-    const finalScrollTop = Math.max(0, targetScrollTop);
+    const maxScrollLeft = Math.max(0, mapGrid.scrollWidth - mapViewport.clientWidth);
+    const maxScrollTop = Math.max(0, mapGrid.scrollHeight - mapViewport.clientHeight);
+    
+    const finalScrollLeft = Math.max(0, Math.min(maxScrollLeft, targetScrollLeft));
+    const finalScrollTop = Math.max(0, Math.min(maxScrollTop, targetScrollTop));
+    
+    console.log('Center calculations:', {
+        tileCoords: { x: tileX, y: tileY },
+        baseTileSize,
+        mapScale: this.mapScale,
+        scaledTileCenter: { x: scaledTileCenterX, y: scaledTileCenterY },
+        viewportCenter: { x: viewportCenterX, y: viewportCenterY },
+        targetScroll: { left: targetScrollLeft, top: targetScrollTop },
+        finalScroll: { left: finalScrollLeft, top: finalScrollTop },
+        maxScroll: { left: maxScrollLeft, top: maxScrollTop }
+    });
     
     // Aktives Tile setzen
     this.activeTile = { x: tileX, y: tileY };
@@ -853,18 +923,30 @@ setZoomLevel(newScale, centerPoint = null) {
     const oldScale = this.mapScale;
     if (newScale === oldScale) return;
     
-    // Standard-Zentrum setzen falls nicht angegeben
-    if (!centerPoint) {
-        if (this.activeTile) {
-            // Wenn aktives Tile vorhanden, als Zentrum verwenden
-            centerPoint = this.getActiveTileCenter();
-        } else {
-            // Sonst Viewport-Zentrum verwenden
-            centerPoint = this.getViewportCenter();
-        }
+    console.log(`🔍 Setting zoom level: ${oldScale} → ${newScale}`);
+    
+    // Zentrumsposition bestimmen
+    let zoomCenterX, zoomCenterY;
+    
+    if (centerPoint && centerPoint.x !== undefined && centerPoint.y !== undefined) {
+        // Explizit übergebener Zentrumspoint (z.B. Mausposition)
+        zoomCenterX = centerPoint.x;
+        zoomCenterY = centerPoint.y;
+        console.log('Using provided center point:', centerPoint);
+    } else if (this.activeTile) {
+        // Aktives Tile als Zentrum verwenden
+        const tileCenter = this.getTileScreenPosition(this.activeTile.x, this.activeTile.y);
+        zoomCenterX = tileCenter.screenX;
+        zoomCenterY = tileCenter.screenY;
+        console.log('Using active tile as center:', this.activeTile, tileCenter);
+    } else {
+        // Viewport-Zentrum als Fallback
+        zoomCenterX = mapViewport.clientWidth / 2;
+        zoomCenterY = mapViewport.clientHeight / 2;
+        console.log('Using viewport center as fallback');
     }
     
-    // Aktuelle Scroll-Position und Viewport-Info
+    // Aktuelle Scroll-Position
     const oldScrollLeft = mapViewport.scrollLeft;
     const oldScrollTop = mapViewport.scrollTop;
     
@@ -878,17 +960,43 @@ setZoomLevel(newScale, centerPoint = null) {
     requestAnimationFrame(() => {
         const scaleFactor = newScale / oldScale;
         
-        // Neue Scroll-Position berechnen um den Zentrumspoint zu erhalten
-        const newScrollLeft = (oldScrollLeft + centerPoint.x) * scaleFactor - centerPoint.x;
-        const newScrollTop = (oldScrollTop + centerPoint.y) * scaleFactor - centerPoint.y;
+        // Neue Scroll-Position berechnen um den Zoom-Punkt beizubehalten
+        const newScrollLeft = (oldScrollLeft + zoomCenterX) * scaleFactor - zoomCenterX;
+        const newScrollTop = (oldScrollTop + zoomCenterY) * scaleFactor - zoomCenterY;
         
         // Scroll-Position setzen (mit Bounds-Check)
-        mapViewport.scrollLeft = Math.max(0, newScrollLeft);
-        mapViewport.scrollTop = Math.max(0, newScrollTop);
+        mapViewport.scrollLeft = Math.max(0, Math.min(newScrollLeft, mapGrid.scrollWidth - mapViewport.clientWidth));
+        mapViewport.scrollTop = Math.max(0, Math.min(newScrollTop, mapGrid.scrollHeight - mapViewport.clientHeight));
         
         this.updateZoomDisplay();
-        console.log('✅ Zoomed to:', Math.round(this.mapScale * 100) + '%');
+        console.log('✅ Zoom applied:', Math.round(this.mapScale * 100) + '%');
     });
+}
+
+getTileScreenPosition(tileX, tileY) {
+    const mapViewport = document.getElementById('mapViewport');
+    const baseTileSize = 48;
+    
+    // Position des Tiles in der Welt (unabhängig von Zoom)
+    const worldX = (tileX + 0.5) * baseTileSize;
+    const worldY = (tileY + 0.5) * baseTileSize;
+    
+    // Position in der skalierten Karte
+    const scaledX = worldX * this.mapScale;
+    const scaledY = worldY * this.mapScale;
+    
+    // Position relativ zum Viewport (Bildschirmposition)
+    const screenX = scaledX - mapViewport.scrollLeft;
+    const screenY = scaledY - mapViewport.scrollTop;
+    
+    return {
+        worldX: worldX,
+        worldY: worldY,
+        scaledX: scaledX,
+        scaledY: scaledY,
+        screenX: screenX,
+        screenY: screenY
+    };
 }
 
 getActiveTileCenter() {

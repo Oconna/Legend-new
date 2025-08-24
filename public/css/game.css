@@ -284,6 +284,10 @@ body {
     position: relative;
 }
 
+#mapViewport {
+    scroll-behavior: smooth;
+}
+
 #mapGrid {
     display: grid;
     gap: 1px;

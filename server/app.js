@@ -365,6 +365,7 @@ app.get('/api/chat/stats', (req, res) => {
 io.on('connection', (socket) => {
     console.log(`User connected: ${socket.id}`);
 
+    setupGameHandlers(io, socket);
 
     // Heartbeat/Ping
     socket.on('ping', () => {

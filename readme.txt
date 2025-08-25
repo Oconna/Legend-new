@@ -6,6 +6,7 @@ Folgende Funktionen sind bereits implementiert:
 - Spieleranzahl wird synchronisiert
 - Chatfunktion
 - Rassenauswahl (15 Rassen je 10 Einheiten)
+- Mapgenerator
 
 
 ToDo

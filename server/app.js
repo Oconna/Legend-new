@@ -8,6 +8,7 @@ require('dotenv').config();
 // Import controller modules
 const improvedLobbyManager = require('./controllers/improvedLobbyManager');
 const gameController = require('./controllers/gameController');
+const { setupGameHandlers, startGameAfterRaceSelection } = require('./socketHandlers/gameHandlers');
 const raceController = require('./controllers/raceController');
 const db = require('./config/database');
 const mapController = require('./controllers/mapController');
@@ -650,6 +651,16 @@ io.on('connection', (socket) => {
                 console.log(`🧹 Final chat cleanup for disconnected player ${socket.playerName}`);
             }
         }
+		
+        if (socket.gameId && socket.playerId) {
+            console.log(`🎮 Cleaning up game session for player ${socket.playerName}`);
+            
+            // Spieler aus dem Spielraum entfernen
+            socket.to(`game_${socket.gameId}`).emit('player_disconnected', {
+                playerName: socket.playerName,
+                playerId: socket.playerId
+            });
+        }
         
         console.log(`🔌 Disconnect cleanup completed for ${socket.id}`);
         
@@ -1010,39 +1021,64 @@ io.on('connection', (socket) => {
 });
 
 // Rasse bestätigen
-socket.on('confirm_race', async (data) => {
-    try {
-        console.log('🎯 Confirm race request:', data);
-        
-        if (!data.gameId || !data.playerName || !data.raceId) {
-            socket.emit('error', 'Unvollständige Daten für Rassenbestätigung');
-            return;
+    socket.on('confirm_race', async (data) => {
+        try {
+            console.log('🏁 Race confirmation:', data);
+            
+            if (!data.gameId || !data.playerId || !data.raceId) {
+                socket.emit('error', 'Unvollständige Daten für Rassenbestätigung');
+                return;
+            }
+            
+            const result = await raceController.confirmRaceSelection(
+                data.gameId, 
+                data.playerId, 
+                data.raceId
+            );
+            
+            if (result.success) {
+                // Bestätigung an alle Spieler
+                io.to(`db_game_${data.gameId}`).emit('race_confirmed', {
+                    playerId: data.playerId,
+                    raceId: data.raceId,
+                    playerName: data.playerName
+                });
+                
+                // Prüfe ob alle Spieler ihre Rassen bestätigt haben
+                if (result.allRacesConfirmed) {
+                    console.log('🎮 All races confirmed! Starting game...');
+                    
+                    // Karte generieren
+                    const mapResult = await mapController.generateMap(data.gameId);
+                    if (mapResult.success) {
+                        console.log('🗺️ Map generated successfully');
+                        
+                        // Spielfunktionen nach erfolgreicher Kartengenierung starten
+                        await startGameAfterRaceSelection(io, data.gameId);
+                        
+                        // Alle Spieler zur Spielseite weiterleiten
+                        io.to(`db_game_${data.gameId}`).emit('game_ready', {
+                            gameId: data.gameId,
+                            message: 'Spiel gestartet! Lade Spielfeld...'
+                        });
+                        
+                    } else {
+                        socket.emit('error', 'Fehler bei der Kartengenierung: ' + mapResult.message);
+                    }
+                }
+                
+                // Aktualisiere Race Selection Status
+                await broadcastRaceSelectionSync(data.gameId);
+                
+            } else {
+                socket.emit('error', result.message);
+            }
+            
+        } catch (error) {
+            console.error('Error confirming race:', error);
+            socket.emit('error', 'Fehler bei der Rassenbestätigung: ' + error.message);
         }
-
-        const result = await raceController.confirmRaceSelection(data.gameId, data.playerName, data.raceId);
-        
-        if (result.success) {
-            socket.emit('race_confirmed', {
-                success: true,
-                gameId: data.gameId,
-                playerName: data.playerName,
-                raceId: data.raceId
-            });
-            
-            console.log(`✅ Race confirmed for ${data.playerName}: ${data.raceId}`);
-            
-            // Sync an alle Spieler senden
-            await broadcastRaceSelectionSync(data.gameId);
-            
-        } else {
-            socket.emit('error', result.message);
-        }
-        
-    } catch (error) {
-        console.error('Error confirming race:', error);
-        socket.emit('error', 'Fehler bei der Rassenbestätigung');
-    }
-});
+    });
 
     socket.on('request_map_generation', async (data) => {
     try {
@@ -1396,17 +1432,36 @@ setInterval(() => {
 }, 30 * 60 * 1000); // 30 Minuten
 
 // Health check endpoint
-app.get('/health', (req, res) => {
-    res.json({
-        status: 'healthy',
-        uptime: process.uptime(),
-        timestamp: new Date().toISOString(),
-        memoryUsage: process.memoryUsage(),
-        activeConnections: io.engine.clientsCount,
-        memoryGames: improvedLobbyManager.games.size,
-        dbGamePlayers: dbGamePlayers.size,
-        chatRooms: chatRooms.size
-    });
+app.get('/health', async (req, res) => {
+    try {
+        // Bestehende Health Checks...
+        
+        // Zusätzliche Game-spezifische Health Checks
+        const activeGamesCount = await db.query(
+            'SELECT COUNT(*) as count FROM games WHERE status IN ("playing", "race_selection")'
+        );
+        
+        const totalPlayersCount = await db.query(
+            'SELECT COUNT(*) as count FROM game_players WHERE is_active = 1'
+        );
+        
+        res.json({
+            status: 'healthy',
+            timestamp: new Date().toISOString(),
+            database: 'connected',
+            socketio: 'active',
+            activeGames: activeGamesCount[0]?.count || 0,
+            activePlayers: totalPlayersCount[0]?.count || 0,
+            memoryUsage: process.memoryUsage(),
+            uptime: process.uptime()
+        });
+    } catch (error) {
+        res.status(503).json({
+            status: 'unhealthy',
+            error: error.message,
+            timestamp: new Date().toISOString()
+        });
+    }
 });
 
 // Error handling
@@ -1432,20 +1487,154 @@ app.get('/race-selection.html', (req, res) => {
     res.sendFile(path.join(__dirname, '../public/race-selection.html'));
 });
 
+// Static Route für die Spielseite
+app.get('/game.html', (req, res) => {
+    res.sendFile(path.join(__dirname, '../public', 'game.html'));
+});
+
+// Neue API Endpoints für Spielfunktionen hinzufügen:
+
+// API Endpoint für Spielzustand
+app.get('/api/game/:gameId/state', async (req, res) => {
+    try {
+        const gameId = req.params.gameId;
+        
+        const gameEngine = require('./controllers/gameEngine');
+        const result = await gameEngine.loadGameState(gameId);
+        
+        if (result.success) {
+            res.json({
+                success: true,
+                gameState: result.gameState
+            });
+        } else {
+            res.status(404).json({
+                success: false,
+                message: result.message
+            });
+        }
+    } catch (error) {
+        console.error('Error getting game state via API:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Interner Serverfehler'
+        });
+    }
+});
+
+// API Endpoint für Spielstatistiken
+app.get('/api/game/:gameId/stats', async (req, res) => {
+    try {
+        const gameId = req.params.gameId;
+        
+        const stats = await db.query(`
+            SELECT 
+                COUNT(DISTINCT gp.id) as total_players,
+                COUNT(DISTINCT CASE WHEN gp.is_active = 1 THEN gp.id END) as active_players,
+                COUNT(DISTINCT gu.id) as total_units,
+                COUNT(DISTINCT gm.id) as total_buildings,
+                MAX(g.turn_number) as current_turn,
+                g.status,
+                g.started_at,
+                TIMESTAMPDIFF(MINUTE, g.started_at, NOW()) as game_duration_minutes
+            FROM games g
+            LEFT JOIN game_players gp ON g.id = gp.game_id
+            LEFT JOIN game_units gu ON g.id = gu.game_id
+            LEFT JOIN game_maps gm ON g.id = gm.game_id AND gm.building_type_id IS NOT NULL
+            WHERE g.id = ?
+            GROUP BY g.id
+        `, [gameId]);
+        
+        res.json({
+            success: true,
+            stats: stats[0] || {}
+        });
+        
+    } catch (error) {
+        console.error('Error getting game stats:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Fehler beim Laden der Statistiken'
+        });
+    }
+});
+
+// API Endpoint für Kampflog
+app.get('/api/game/:gameId/battle-log', async (req, res) => {
+    try {
+        const gameId = req.params.gameId;
+        const limit = parseInt(req.query.limit) || 50;
+        
+        const battleLog = await db.query(`
+            SELECT 
+                bl.*,
+                attacker_unit.unit_name as attacker_name,
+                attacker_player.player_name as attacker_player_name,
+                defender_unit.unit_name as defender_name,
+                defender_player.player_name as defender_player_name
+            FROM battle_log bl
+            LEFT JOIN game_units attacker_unit ON bl.attacker_unit_id = attacker_unit.id
+            LEFT JOIN game_players attacker_player ON attacker_unit.player_id = attacker_player.id
+            LEFT JOIN game_units defender_unit ON bl.defender_unit_id = defender_unit.id
+            LEFT JOIN game_players defender_player ON defender_unit.player_id = defender_player.id
+            WHERE bl.game_id = ?
+            ORDER BY bl.created_at DESC
+            LIMIT ?
+        `, [gameId, limit]);
+        
+        res.json({
+            success: true,
+            battleLog: battleLog
+        });
+        
+    } catch (error) {
+        console.error('Error getting battle log:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Fehler beim Laden des Kampflogs'
+        });
+    }
+});
+
 // Handle uncaught exceptions
-process.on('uncaughtException', (err) => {
-    console.error('Uncaught Exception:', err);
+process.on('uncaughtException', (error) => {
+    console.error('🚨 Uncaught Exception in Game Server:', error);
     
-    // Graceful shutdown
-    io.emit('server_shutdown', {
-        message: 'Server wird neugestartet. Bitte speichere deinen Fortschritt.',
+    // Benachrichtige alle aktiven Spieler
+    io.emit('server_error', {
+        message: 'Serverfehler aufgetreten. Spiel wird möglicherweise neu gestartet.',
         timestamp: new Date().toISOString()
     });
     
+    // Graceful shutdown nach kurzer Verzögerung
     setTimeout(() => {
         process.exit(1);
-    }, 2000);
+    }, 5000);
 });
+
+setInterval(async () => {
+    try {
+        console.log('🧹 Running periodic cleanup...');
+        
+        // Lösche alte Battle Logs (älter als 7 Tage)
+        await db.query(
+            'DELETE FROM battle_log WHERE created_at < DATE_SUB(NOW(), INTERVAL 7 DAY)'
+        );
+        
+        // Deaktiviere Spieler ohne Socket-Verbindung für > 30 Minuten
+        await db.query(`
+            UPDATE game_players SET is_active = 0 
+            WHERE socket_id IS NULL 
+            AND joined_at < DATE_SUB(NOW(), INTERVAL 30 MINUTE)
+            AND game_id IN (SELECT id FROM games WHERE status = 'playing')
+        `);
+        
+        console.log('✅ Periodic cleanup completed');
+        
+    } catch (error) {
+        console.error('Error during periodic cleanup:', error);
+    }
+}, 30 * 60 * 1000); // 30 Minuten
 
 process.on('unhandledRejection', (reason, promise) => {
     console.error('Unhandled Rejection at:', promise, 'reason:', reason);

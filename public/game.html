@@ -64,44 +64,391 @@
                 </div>
                 <div class="info-item">
                     <span>Einheiten:</span>
-                    <span id="playerUnits">0</span>
+                    <span id="playerUnits">0</span><!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Strategiespiel</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/game.css">
+</head>
+<body>
+    <div id="gameMain" class="game-main">
+        <!-- Header -->
+        <header class="game-header">
+            <div class="game-header-left">
+                <h1>🏰 Strategiespiel</h1>
+                <div class="game-info">
+                    <span id="currentTurn">Warten auf Spielstart...</span>
+                    <span>|</span>
+                    <span>Runde: <span id="turnNumber">1</span></span>
                 </div>
             </div>
+            <div class="game-header-right">
+                <button id="endTurnBtn" class="btn btn-primary" disabled>Zug beenden</button>
+                <button onclick="window.location.href='/'" class="btn btn-secondary">Lobby</button>
+            </div>
+        </header>
 
-            <!-- Action Buttons -->
-            <div class="action-buttons">
-                <button id="endTurnBtn" class="btn btn-primary" disabled>
-                    Zug beenden
-                </button>
-                <button id="centerMapBtn" class="btn btn-secondary">
-                    Karte zentrieren
-                </button>
-                <button id="leaveGameBtn" class="btn btn-danger">
-                    Spiel verlassen
+        <!-- Hauptspielbereich -->
+        <div class="game-content">
+            <!-- Linke Seitenleiste -->
+            <aside class="game-sidebar left">
+                <div class="sidebar-section">
+                    <h3>👤 Spieler Info</h3>
+                    <div class="player-info">
+                        <p><strong>Name:</strong> <span id="playerName">-</span></p>
+                        <p><strong>Rasse:</strong> <span id="playerRace">-</span></p>
+                        <p><strong>Level:</strong> <span id="playerLevel">1</span></p>
+                        <p><strong>💰 Gold:</strong> <span id="playerGold">0</span></p>
+                    </div>
+                    <button id="upgradeRaceBtn" class="btn btn-upgrade" disabled>
+                        📈 Rasse aufwerten
+                    </button>
+                </div>
+
+                <div class="sidebar-section">
+                    <h3>🎮 Aktionen</h3>
+                    <div class="action-buttons">
+                        <button id="moveActionBtn" class="btn action-btn" disabled>
+                            🚶 Bewegen
+                        </button>
+                        <button id="attackActionBtn" class="btn action-btn" disabled>
+                            ⚔️ Angreifen
+                        </button>
+                        <button id="buyActionBtn" class="btn action-btn" disabled>
+                            💰 Einheit kaufen
+                        </button>
+                        <button id="cancelActionBtn" class="btn btn-cancel">
+                            ❌ Abbrechen
+                        </button>
+                    </div>
+                </div>
+
+                <div class="sidebar-section">
+                    <h3>ℹ️ Auswahl Info</h3>
+                    <div id="unitInfo" class="selection-info" style="display: none;">
+                        <!-- Unit info wird hier eingefügt -->
+                    </div>
+                    <div id="buildingInfo" class="selection-info" style="display: none;">
+                        <!-- Building info wird hier eingefügt -->
+                    </div>
+                    <div id="tileInfo" class="selection-info" style="display: none;">
+                        <!-- Tile info wird hier eingefügt -->
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Spielfeld -->
+            <main class="game-area">
+                <div id="gameContainer" class="game-container">
+                    <canvas id="gameCanvas" class="game-canvas"></canvas>
+                    
+                    <!-- Zoom Controls -->
+                    <div class="zoom-controls">
+                        <button id="zoomInBtn" class="zoom-btn">🔍+</button>
+                        <button id="zoomOutBtn" class="zoom-btn">🔍-</button>
+                        <button id="zoomResetBtn" class="zoom-btn">🏠</button>
+                    </div>
+                    
+                    <!-- Mini-Map (optional) -->
+                    <div class="minimap" id="minimap">
+                        <canvas id="minimapCanvas" width="150" height="150"></canvas>
+                    </div>
+                </div>
+            </main>
+
+            <!-- Rechte Seitenleiste -->
+            <aside class="game-sidebar right">
+                <div class="sidebar-section">
+                    <h3>👥 Spieler Liste</h3>
+                    <div id="playersList" class="players-list">
+                        <!-- Spieler werden hier eingefügt -->
+                    </div>
+                </div>
+
+                <div class="sidebar-section">
+                    <h3>📊 Spielstatistiken</h3>
+                    <div id="gameStats" class="game-stats">
+                        <p>🏰 Eigene Städte: <span id="ownCities">0</span></p>
+                        <p>⚔️ Eigene Einheiten: <span id="ownUnits">0</span></p>
+                        <p>💀 Verlorene Einheiten: <span id="lostUnits">0</span></p>
+                        <p>🎯 Eliminierte Gegner: <span id="eliminatedEnemies">0</span></p>
+                    </div>
+                </div>
+
+                <div class="sidebar-section">
+                    <h3>📝 Spielverlauf</h3>
+                    <div id="gameLog" class="game-log">
+                        <div class="log-entry">Spiel gestartet</div>
+                    </div>
+                </div>
+            </aside>
+        </div>
+    </div>
+
+    <!-- Einheitenkauf Dialog -->
+    <div id="unitPurchaseDialog" class="modal" style="display: none;">
+        <div class="modal-content unit-purchase-modal">
+            <div class="modal-header">
+                <h3>🛒 Einheit kaufen</h3>
+                <button class="close-btn" onclick="this.parentNode.parentNode.parentNode.style.display='none'">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="availableUnits" class="units-grid">
+                    <!-- Verfügbare Einheiten werden hier eingefügt -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-cancel" onclick="document.getElementById('unitPurchaseDialog').style.display='none'">
+                    Abbrechen
                 </button>
             </div>
         </div>
+    </div>
 
-        <!-- Map Container -->
-        <div class="map-container">
-            <!-- Map Controls -->
-            <div class="map-controls">
-                <button class="control-btn" id="zoomInBtn" title="Vergrößern (+)">+</button>
-                <button class="control-btn" id="zoomToActiveTileBtn" title="ZoomActiveTile (+)">+</button>
-                <button class="control-btn" id="zoomOutBtn" title="Verkleinern (-)">-</button>
-                <button class="control-btn" id="resetZoomBtn" title="Zoom zurücksetzen (0)">Reset</button>
+    <!-- Spiel beendet Dialog -->
+    <div id="gameEndDialog" class="modal" style="display: none;">
+        <div class="modal-content game-end-modal">
+            <div class="modal-header">
+                <h3>🏆 Spiel beendet!</h3>
             </div>
+            <div class="modal-body">
+                <div id="gameEndContent">
+                    <!-- Spielergebnis wird hier eingefügt -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" onclick="window.location.href='/'">
+                    Zur Lobby
+                </button>
+            </div>
+        </div>
+    </div>
 
-            <!-- Map Viewport -->
-            <div id="mapViewport" class="map-viewport">
-                <div id="mapGrid" class="map-grid">
-                    <!-- Map tiles will be generated by JavaScript -->
+    <!-- Bestätigungsdialoge -->
+    <div id="confirmDialog" class="modal" style="display: none;">
+        <div class="modal-content confirm-modal">
+            <div class="modal-header">
+                <h3>❓ Bestätigung</h3>
+            </div>
+            <div class="modal-body">
+                <p id="confirmMessage">Möchten Sie diese Aktion ausführen?</p>
+            </div>
+            <div class="modal-footer">
+                <button id="confirmYes" class="btn btn-primary">Ja</button>
+                <button id="confirmNo" class="btn btn-cancel">Nein</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hilfe Dialog -->
+    <div id="helpDialog" class="modal" style="display: none;">
+        <div class="modal-content help-modal">
+            <div class="modal-header">
+                <h3>❓ Spielhilfe</h3>
+                <button class="close-btn" onclick="this.parentNode.parentNode.parentNode.style.display='none'">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="help-content">
+                    <h4>🎮 Spielsteuerung</h4>
+                    <ul>
+                        <li><strong>Linksklick:</strong> Feld/Einheit auswählen</li>
+                        <li><strong>Mausrad:</strong> Zoom</li>
+                        <li><strong>Maus ziehen:</strong> Karte bewegen</li>
+                        <li><strong>ESC:</strong> Aktion abbrechen</li>
+                        <li><strong>Leertaste:</strong> Zug beenden</li>
+                    </ul>
+                    
+                    <h4>⚔️ Spielregeln</h4>
+                    <ul>
+                        <li>🏰 Städte und Burgen bringen Gold pro Runde</li>
+                        <li>🚶 Bewegung kostet Bewegungspunkte je nach Gelände</li>
+                        <li>⚔️ Angriffe sind nur einmal pro Zug möglich</li>
+                        <li>🔥 Fliegende Einheiten überwinden Wasser und Berge leichter</li>
+                        <li>📈 Rassen-Aufstieg verbessert alle neuen Einheiten</li>
+                    </ul>
+                    
+                    <h4>🌍 Terrain-Typen</h4>
+                    <ul>
+                        <li>🌱 <span style="color: #90EE90;">Gras</span>: 1 Bewegungspunkt</li>
+                        <li>🏔️ <span style="color: #8B4513;">Berg</span>: 3 Bewegungspunkte (+1 Reichweite für Fernkampf)</li>
+                        <li>🌊 <span style="color: #4169E1;">Wasser</span>: Nur für fliegende Einheiten</li>
+                        <li>🌲 <span style="color: #228B22;">Wald</span>: 2 Bewegungspunkte</li>
+                        <li>🏜️ <span style="color: #F4A460;">Wüste</span>: 2 Bewegungspunkte</li>
+                    </ul>
                 </div>
             </div>
         </div>
     </div>
 
+    <!-- Benachrichtigungen -->
+    <div id="notifications" class="notifications-container"></div>
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="loading-overlay" style="display: none;">
+        <div class="loading-spinner">
+            <div class="spinner"></div>
+            <p>Lade Spielzustand...</p>
+        </div>
+    </div>
+
+    <!-- Floating Help Button -->
+    <button id="helpBtn" class="help-btn" onclick="document.getElementById('helpDialog').style.display='block'">
+        ❓
+    </button>
+
+    <!-- Scripts -->
     <script src="/socket.io/socket.io.js"></script>
-    <script src="js/game.js"></script>
+    <script src="/js/gameClient.js"></script>
+    
+    <script>
+        // Zusätzliche UI-Funktionen
+        
+        // Zoom Controls
+        document.getElementById('zoomInBtn')?.addEventListener('click', () => {
+            if (window.gameClient) {
+                window.gameClient.zoomLevel = Math.min(3.0, window.gameClient.zoomLevel * 1.2);
+                window.gameClient.render();
+            }
+        });
+
+        document.getElementById('zoomOutBtn')?.addEventListener('click', () => {
+            if (window.gameClient) {
+                window.gameClient.zoomLevel = Math.max(0.5, window.gameClient.zoomLevel * 0.8);
+                window.gameClient.render();
+            }
+        });
+
+        document.getElementById('zoomResetBtn')?.addEventListener('click', () => {
+            if (window.gameClient) {
+                window.gameClient.zoomLevel = 1.0;
+                window.gameClient.mapOffset = { x: 0, y: 0 };
+                window.gameClient.render();
+            }
+        });
+
+        // Bestätigungsdialog
+        function showConfirmDialog(message, onConfirm) {
+            document.getElementById('confirmMessage').textContent = message;
+            document.getElementById('confirmDialog').style.display = 'block';
+            
+            document.getElementById('confirmYes').onclick = () => {
+                document.getElementById('confirmDialog').style.display = 'none';
+                if (onConfirm) onConfirm();
+            };
+            
+            document.getElementById('confirmNo').onclick = () => {
+                document.getElementById('confirmDialog').style.display = 'none';
+            };
+        }
+
+        // Loading Overlay
+        function showLoading() {
+            document.getElementById('loadingOverlay').style.display = 'flex';
+        }
+
+        function hideLoading() {
+            document.getElementById('loadingOverlay').style.display = 'none';
+        }
+
+        // Keyboard Shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+            
+            switch(e.key) {
+                case 'h':
+                case 'H':
+                case '?':
+                    document.getElementById('helpDialog').style.display = 'block';
+                    break;
+                case 'm':
+                case 'M':
+                    document.getElementById('moveActionBtn')?.click();
+                    break;
+                case 'a':
+                case 'A':
+                    document.getElementById('attackActionBtn')?.click();
+                    break;
+                case 'b':
+                case 'B':
+                    document.getElementById('buyActionBtn')?.click();
+                    break;
+                case 'u':
+                case 'U':
+                    document.getElementById('upgradeRaceBtn')?.click();
+                    break;
+            }
+        });
+
+        // Responsive Design - Canvas Resize
+        window.addEventListener('resize', () => {
+            if (window.gameClient && window.gameClient.canvas) {
+                window.gameClient.resizeCanvas();
+            }
+        });
+
+        // Prevent context menu on canvas
+        document.getElementById('gameCanvas')?.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+        });
+
+        // Touch support für mobile Geräte
+        let touchStartPos = null;
+        
+        document.getElementById('gameCanvas')?.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            touchStartPos = { x: touch.clientX, y: touch.clientY };
+            
+            // Konvertiere Touch zu Mouse Event
+            const mouseEvent = new MouseEvent('mousedown', {
+                clientX: touch.clientX,
+                clientY: touch.clientY,
+                bubbles: true
+            });
+            e.target.dispatchEvent(mouseEvent);
+        });
+
+        document.getElementById('gameCanvas')?.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            
+            const mouseEvent = new MouseEvent('mousemove', {
+                clientX: touch.clientX,
+                clientY: touch.clientY,
+                bubbles: true
+            });
+            e.target.dispatchEvent(mouseEvent);
+        });
+
+        document.getElementById('gameCanvas')?.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            const touch = e.changedTouches[0];
+            
+            // Tap Detection - wenn kurze Bewegung, dann als Click behandeln
+            if (touchStartPos) {
+                const distance = Math.abs(touch.clientX - touchStartPos.x) + Math.abs(touch.clientY - touchStartPos.y);
+                if (distance < 10) {
+                    const clickEvent = new MouseEvent('click', {
+                        clientX: touch.clientX,
+                        clientY: touch.clientY,
+                        bubbles: true
+                    });
+                    e.target.dispatchEvent(clickEvent);
+                }
+            }
+            
+            const mouseEvent = new MouseEvent('mouseup', {
+                clientX: touch.clientX,
+                clientY: touch.clientY,
+                bubbles: true
+            });
+            e.target.dispatchEvent(mouseEvent);
+            
+            touchStartPos = null;
+        });
+    </script>
 </body>
 </html>

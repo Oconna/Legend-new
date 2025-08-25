@@ -221,146 +221,6 @@ async function broadcastRaceSelectionSync(gameId) {
     }
 }
 
-// Routes
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, '../public/index.html'));
-});
-
-app.get('/game/:gameId', (req, res) => {
-    res.sendFile(path.join(__dirname, '../public/game.html'));
-});
-
-// API Routes
-app.get('/api/test', async (req, res) => {
-    try {
-        const testResult = await db.query('SELECT 1 as test');
-        const races = await db.query('SELECT COUNT(*) as count FROM races');
-        
-        res.json({
-            status: 'OK',
-            database: 'Connected',
-            testQuery: testResult,
-            racesCount: races[0].count,
-            memoryGames: improvedLobbyManager.games.size,
-            memoryPlayers: improvedLobbyManager.players.size,
-            dbGamePlayers: dbGamePlayers.size,
-            chatRooms: chatRooms.size,
-            timestamp: new Date().toISOString()
-        });
-    } catch (error) {
-        console.error('API Test Error:', error);
-        res.status(500).json({
-            status: 'ERROR',
-            error: error.message
-        });
-    }
-});
-
-app.get('/api/games', async (req, res) => {
-    try {
-        // Get memory-based waiting games
-        const memoryGames = improvedLobbyManager.getAvailableGames();
-        
-        // Get database-based active games (optional, for running games)
-        let dbGames = [];
-        try {
-            dbGames = await db.query(`
-                SELECT 
-                    g.id,
-                    g.name,
-                    g.max_players,
-                    g.current_players,
-                    g.map_size,
-                    g.status,
-                    g.created_at
-                FROM games g
-                WHERE g.status IN ('race_selection', 'playing')
-                ORDER BY g.created_at DESC
-            `);
-        } catch (dbError) {
-            console.log('DB games query failed, using memory only');
-        }
-        
-        res.json([...memoryGames, ...dbGames]);
-    } catch (error) {
-        console.error('Error in /api/games:', error);
-        res.status(500).json({ error: 'Fehler beim Laden der Spiele: ' + error.message });
-    }
-});
-
-app.get('/api/races', async (req, res) => {
-    try {
-        const races = await gameController.getAvailableRaces();
-        if (races.success) {
-            res.json(races.races);
-        } else {
-            res.status(500).json({ error: 'Fehler beim Laden der Rassen' });
-        }
-    } catch (error) {
-        console.error('Error in /api/races:', error);
-        res.status(500).json({ error: 'Fehler beim Laden der Rassen: ' + error.message });
-    }
-});
-
-app.get('/api/game/:gameId/status', async (req, res) => {
-    try {
-        const gameId = req.params.gameId;
-        const gameState = await gameController.getGameState(gameId);
-        
-        if (gameState) {
-            res.json(gameState);
-        } else {
-            res.status(404).json({ error: 'Spiel nicht gefunden' });
-        }
-    } catch (error) {
-        console.error('Error in /api/game/:gameId/status:', error);
-        res.status(500).json({ error: 'Fehler beim Laden des Spielstatus: ' + error.message });
-    }
-});
-
-app.get('/api/game/:gameId/race-selections', async (req, res) => {
-    try {
-        const gameId = req.params.gameId;
-        const result = await gameController.getAllRaceSelections(gameId);
-        
-        if (result.success) {
-            res.json({
-                gameId: gameId,
-                selections: result.selections,
-                timestamp: new Date().toISOString()
-            });
-        } else {
-            res.status(404).json({ error: result.message });
-        }
-    } catch (error) {
-        console.error('Error in /api/game/:gameId/race-selections:', error);
-        res.status(500).json({ error: 'Fehler beim Laden der Rassenwahlen: ' + error.message });
-    }
-});
-
-app.get('/api/chat/stats', (req, res) => {
-    try {
-        const stats = {
-            totalChatRooms: chatRooms.size,
-            rooms: []
-        };
-        
-        chatRooms.forEach((room, gameId) => {
-            stats.rooms.push({
-                gameId: gameId,
-                playerCount: room.players.size,
-                messageCount: room.messages.length,
-                createdAt: room.createdAt
-            });
-        });
-        
-        res.json(stats);
-    } catch (error) {
-        console.error('Error getting chat stats:', error);
-        res.status(500).json({ error: 'Internal server error' });
-    }
-});
-
 // Socket.IO Connection Handler
 io.on('connection', (socket) => {
     console.log(`User connected: ${socket.id}`);
@@ -1431,6 +1291,146 @@ setInterval(() => {
         console.error('❌ Error during chat room cleanup:', error);
     }
 }, 30 * 60 * 1000); // 30 Minuten
+
+// Routes
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, '../public/index.html'));
+});
+
+app.get('/game/:gameId', (req, res) => {
+    res.sendFile(path.join(__dirname, '../public/game.html'));
+});
+
+// API Routes
+app.get('/api/test', async (req, res) => {
+    try {
+        const testResult = await db.query('SELECT 1 as test');
+        const races = await db.query('SELECT COUNT(*) as count FROM races');
+
+        res.json({
+            status: 'OK',
+            database: 'Connected',
+            testQuery: testResult,
+            racesCount: races[0].count,
+            memoryGames: improvedLobbyManager.games.size,
+            memoryPlayers: improvedLobbyManager.players.size,
+            dbGamePlayers: dbGamePlayers.size,
+            chatRooms: chatRooms.size,
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        console.error('API Test Error:', error);
+        res.status(500).json({
+            status: 'ERROR',
+            error: error.message
+        });
+    }
+});
+
+app.get('/api/games', async (req, res) => {
+    try {
+        // Get memory-based waiting games
+        const memoryGames = improvedLobbyManager.getAvailableGames();
+
+        // Get database-based active games (optional, for running games)
+        let dbGames = [];
+        try {
+            dbGames = await db.query(`
+                SELECT 
+                    g.id,
+                    g.name,
+                    g.max_players,
+                    g.current_players,
+                    g.map_size,
+                    g.status,
+                    g.created_at
+                FROM games g
+                WHERE g.status IN ('race_selection', 'playing')
+                ORDER BY g.created_at DESC
+            `);
+        } catch (dbError) {
+            console.log('DB games query failed, using memory only');
+        }
+
+        res.json([...memoryGames, ...dbGames]);
+    } catch (error) {
+        console.error('Error in /api/games:', error);
+        res.status(500).json({ error: 'Fehler beim Laden der Spiele: ' + error.message });
+    }
+});
+
+app.get('/api/races', async (req, res) => {
+    try {
+        const races = await gameController.getAvailableRaces();
+        if (races.success) {
+            res.json(races.races);
+        } else {
+            res.status(500).json({ error: 'Fehler beim Laden der Rassen' });
+        }
+    } catch (error) {
+        console.error('Error in /api/races:', error);
+        res.status(500).json({ error: 'Fehler beim Laden der Rassen: ' + error.message });
+    }
+});
+
+app.get('/api/game/:gameId/status', async (req, res) => {
+    try {
+        const gameId = req.params.gameId;
+        const gameState = await gameController.getGameState(gameId);
+
+        if (gameState) {
+            res.json(gameState);
+        } else {
+            res.status(404).json({ error: 'Spiel nicht gefunden' });
+        }
+    } catch (error) {
+        console.error('Error in /api/game/:gameId/status:', error);
+        res.status(500).json({ error: 'Fehler beim Laden des Spielstatus: ' + error.message });
+    }
+});
+
+app.get('/api/game/:gameId/race-selections', async (req, res) => {
+    try {
+        const gameId = req.params.gameId;
+        const result = await gameController.getAllRaceSelections(gameId);
+
+        if (result.success) {
+            res.json({
+                gameId: gameId,
+                selections: result.selections,
+                timestamp: new Date().toISOString()
+            });
+        } else {
+            res.status(404).json({ error: result.message });
+        }
+    } catch (error) {
+        console.error('Error in /api/game/:gameId/race-selections:', error);
+        res.status(500).json({ error: 'Fehler beim Laden der Rassenwahlen: ' + error.message });
+    }
+});
+
+app.get('/api/chat/stats', (req, res) => {
+    try {
+        const stats = {
+            totalChatRooms: chatRooms.size,
+            rooms: []
+        };
+
+        chatRooms.forEach((room, gameId) => {
+            stats.rooms.push({
+                gameId: gameId,
+                playerCount: room.players.size,
+                messageCount: room.messages.length,
+                createdAt: room.createdAt
+            });
+        });
+
+        res.json(stats);
+    } catch (error) {
+        console.error('Error getting chat stats:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
 
 // Health check endpoint
 app.get('/health', async (req, res) => {

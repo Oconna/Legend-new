@@ -117,57 +117,6 @@ class RaceController {
         }
     }
 
-    // Spieler bestätigt seine Rassenauswahl
-    async confirmRace(gameId, playerName, raceId) {
-        try {
-            console.log(`Player ${playerName} confirming race ${raceId} for game ${gameId}`);
-
-            // Prüfe ob das Spiel in der Rassenauswahl-Phase ist
-            const game = await db.query(
-                'SELECT id, status FROM games WHERE id = ? AND status = "race_selection"',
-                [gameId]
-            );
-
-            if (game.length === 0) {
-                return { success: false, message: 'Spiel nicht gefunden oder nicht in Rassenauswahl-Phase' };
-            }
-
-            // Prüfe ob der Spieler die Rasse bereits ausgewählt hat
-            const player = await db.query(
-                'SELECT id, race_id FROM game_players WHERE game_id = ? AND player_name = ? AND race_id = ?',
-                [gameId, playerName, raceId]
-            );
-
-            if (player.length === 0) {
-                return { success: false, message: 'Rasse muss zuerst ausgewählt werden' };
-            }
-
-            // Bestätige die Rassenauswahl
-            await db.query(
-                'UPDATE game_players SET race_confirmed = 1 WHERE game_id = ? AND player_name = ? AND race_id = ?',
-                [gameId, playerName, raceId]
-            );
-
-            console.log(`✓ Race confirmed for player ${playerName}`);
-
-            // Prüfe ob alle Spieler ihre Rasse bestätigt haben
-            const allPlayersReady = await this.checkAllPlayersReady(gameId);
-
-            return {
-                success: true,
-                playerName: playerName,
-                raceId: raceId,
-                allReady: allPlayersReady.allReady,
-                readyCount: allPlayersReady.readyCount,
-                totalCount: allPlayersReady.totalCount
-            };
-
-        } catch (error) {
-            console.error('Error confirming race:', error);
-            return { success: false, message: 'Fehler bei der Rassenbestätigung: ' + error.message };
-        }
-    }
-
     // Spieler deselektiert seine Rasse (um sie zu ändern)
     async deselectRace(gameId, playerName) {
         try {

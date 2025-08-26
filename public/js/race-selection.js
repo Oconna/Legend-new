@@ -145,7 +145,7 @@ class RaceSelectionClient {
 
     setupEventListeners() {
         // Confirm Button
-        const confirmBtn = document.getElementById('confirmBtn"');
+        const confirmBtn = document.getElementById('confirmBtn');
         if (confirmBtn) {
             confirmBtn.addEventListener('click', () => this.confirmRaceSelection());
         }
@@ -359,37 +359,6 @@ handleRedirectToGame(data) {
         console.log('Redirecting to:', gameUrl);
         window.location.href = gameUrl;
     }, 2000);
-}
-
-confirmRaceSelection() {
-    if (!this.selectedRaceId) {
-        this.showError('Bitte wähle zuerst eine Rasse aus');
-        return;
-    }
-
-    if (this.raceConfirmed) {
-        this.showError('Du hast bereits eine Rasse bestätigt');
-        return;
-    }
-
-    console.log('🎯 Confirming race selection:', this.selectedRaceId);
-
-    // UI Update: Zeige Bestätigungsstatus
-    this.showProgress('Rasse wird bestätigt...', 60);
-    
-    // Sende Bestätigung an Server
-    this.socket.emit('confirm_race', {
-        gameId: this.gameDbId, // Verwende gameDbId statt gameId
-        playerName: this.playerName,
-        raceId: this.selectedRace?.id
-    });
-
-    // Disable Button während der Verarbeitung
-    const confirmBtn = document.getElementById('confirmBtn');
-    if (confirmBtn) {
-        confirmBtn.disabled = true;
-        confirmBtn.textContent = 'Wird bestätigt...';
-    }
 }
 
 handleRaceConfirmed(data) {

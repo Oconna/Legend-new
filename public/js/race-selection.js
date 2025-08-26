@@ -145,19 +145,19 @@ class RaceSelectionClient {
 
     setupEventListeners() {
         // Confirm Button
-        const confirmBtn = document.getElementById('btn-confirm"');
+        const confirmBtn = document.getElementById('confirmBtn"');
         if (confirmBtn) {
             confirmBtn.addEventListener('click', () => this.confirmRaceSelection());
         }
 
         // Change Button
-        const changeBtn = document.getElementById('btn-change');
+        const changeBtn = document.getElementById('changeBtn');
         if (changeBtn) {
             changeBtn.addEventListener('click', () => this.changeRaceSelection());
         }
 
         // Back Button
-        const backBtn = document.getElementById('btn-back');
+        const backBtn = document.getElementById('backBtn');
         if (backBtn) {
             backBtn.addEventListener('click', () => this.goBackToLobby());
         }

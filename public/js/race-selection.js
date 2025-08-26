@@ -145,19 +145,19 @@ class RaceSelectionClient {
 
     setupEventListeners() {
         // Confirm Button
-        const confirmBtn = document.getElementById('confirmBtn');
+        const confirmBtn = document.getElementById('btn-confirm"');
         if (confirmBtn) {
             confirmBtn.addEventListener('click', () => this.confirmRaceSelection());
         }
 
         // Change Button
-        const changeBtn = document.getElementById('changeBtn');
+        const changeBtn = document.getElementById('btn-change');
         if (changeBtn) {
             changeBtn.addEventListener('click', () => this.changeRaceSelection());
         }
 
         // Back Button
-        const backBtn = document.getElementById('backBtn');
+        const backBtn = document.getElementById('btn-back');
         if (backBtn) {
             backBtn.addEventListener('click', () => this.goBackToLobby());
         }
@@ -385,7 +385,7 @@ confirmRaceSelection() {
     });
 
     // Disable Button während der Verarbeitung
-    const confirmBtn = document.getElementById('confirmRaceBtn');
+    const confirmBtn = document.getElementById('confirmBtn');
     if (confirmBtn) {
         confirmBtn.disabled = true;
         confirmBtn.textContent = 'Wird bestätigt...';
@@ -400,7 +400,7 @@ handleRaceConfirmed(data) {
         this.showSuccess(`Rasse ${this.selectedRace?.name || 'erfolgreich'} bestätigt!`);
         
         // UI Updates
-        const confirmBtn = document.getElementById('confirmRaceBtn');
+        const confirmBtn = document.getElementById('confirmBtn');
         if (confirmBtn) {
             confirmBtn.textContent = 'Rasse bestätigt ✅';
             confirmBtn.classList.add('confirmed');
@@ -416,7 +416,7 @@ handleRaceConfirmed(data) {
         this.showError('Fehler beim Bestätigen: ' + (data.message || 'Unbekannter Fehler'));
         
         // Button wieder aktivieren
-        const confirmBtn = document.getElementById('confirmRaceBtn');
+        const confirmBtn = document.getElementById('confirmBtn');
         if (confirmBtn) {
             confirmBtn.disabled = false;
             confirmBtn.textContent = 'Rasse bestätigen';

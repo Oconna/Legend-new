@@ -1,4 +1,6 @@
 // Race Selection Client - public/js/race-selection.js (KORRIGIERT)
+const db = require('../config/database');
+
 class RaceSelectionClient {
     constructor() {
         this.socket = null;

@@ -266,6 +266,66 @@ class RaceSelectionClient {
 
         return card;
     }
+	
+async confirmRaceSelection(gameId, playerName, raceId) {
+    try {
+        console.log(`Confirming race selection: ${playerName} -> Race ${raceId} in game ${gameId}`);
+
+        // Prüfe ob das Spiel existiert und in der richtigen Phase ist
+        const game = await db.query(
+            'SELECT * FROM games WHERE id = ? AND status = "race_selection"',
+            [gameId]
+        );
+
+        if (game.length === 0) {
+            return { success: false, message: 'Spiel nicht gefunden oder nicht in Rassenauswahl-Phase' };
+        }
+
+        // Prüfe ob der Spieler existiert
+        const player = await db.query(
+            'SELECT * FROM game_players WHERE game_id = ? AND player_name = ? AND is_active = 1',
+            [gameId, playerName]
+        );
+
+        if (player.length === 0) {
+            return { success: false, message: 'Spieler nicht in diesem Spiel gefunden' };
+        }
+
+        // Prüfe ob die Rasse bereits ausgewählt ist
+        const currentSelection = await db.query(
+            'SELECT race_id, race_confirmed FROM game_players WHERE game_id = ? AND player_name = ?',
+            [gameId, playerName]
+        );
+
+        if (currentSelection.length > 0 && currentSelection[0].race_id !== raceId) {
+            return { success: false, message: 'Du hast bereits eine andere Rasse ausgewählt' };
+        }
+
+        if (currentSelection.length > 0 && currentSelection[0].race_confirmed === 1) {
+            return { success: false, message: 'Du hast bereits eine Rasse bestätigt' };
+        }
+
+        // Bestätige die Rassenauswahl
+        await db.query(
+            'UPDATE game_players SET race_id = ?, race_confirmed = 1 WHERE game_id = ? AND player_name = ?',
+            [raceId, gameId, playerName]
+        );
+
+        console.log(`✅ Race confirmed: ${playerName} -> Race ${raceId} in game ${gameId}`);
+
+        return {
+            success: true,
+            gameId: gameId,
+            playerName: playerName,
+            raceId: raceId,
+            confirmed: true
+        };
+
+    } catch (error) {
+        console.error('Error confirming race selection:', error);
+        return { success: false, message: 'Fehler beim Bestätigen der Rasse: ' + error.message };
+    }
+}
 
     selectRace(raceId) {
         if (this.isConfirmed) {

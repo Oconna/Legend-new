@@ -98,7 +98,7 @@ class GameEngine {
         
         return totalCost;
     }
-}
+
 
     // Laden des kompletten Spielzustands
     async loadGameState(gameId) {

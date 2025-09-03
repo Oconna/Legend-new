@@ -9,6 +9,7 @@ require('dotenv').config();
 const improvedLobbyManager = require('./controllers/improvedLobbyManager');
 const gameController = require('./controllers/gameController');
 const raceController = require('./controllers/raceController');
+const GameHandlers = require('./socketHandlers/gameHandlers');
 const db = require('./config/database');
 const mapController = require('./controllers/mapController');
 
@@ -34,6 +35,7 @@ app.use(express.static(path.join(__dirname, '../public')));
 // In-memory storage
 const dbGamePlayers = new Map(); // gameId -> Set of socketIds
 const chatRooms = new Map(); // gameId -> { messages: [], players: Set() }
+const gameHandlers = new GameHandlers(io);
 
 // Helper Functions
 function getChatRoom(gameId) {
@@ -99,68 +101,207 @@ function validateChatMessage(message) {
 
 async function startAutomaticMapGeneration(gameId) {
     try {
-        console.log(`🗺️ Starting automatic map generation for game ${gameId}...`);
+        console.log(`🗺️ Starting enhanced map generation for game ${gameId}`);
         
-        // Doppelte Sicherheitsprüfung: Sind wirklich alle Spieler bereit?
-        const doubleCheck = await gameController.getAllRaceSelections(gameId);
-        if (!doubleCheck.success) {
-            throw new Error('Could not verify player status for map generation');
-        }
-        
-        const totalPlayers = doubleCheck.selections.length;
-        const confirmedPlayers = doubleCheck.selections.filter(s => s.race_confirmed === 1).length;
-        
-        if (confirmedPlayers !== totalPlayers) {
-            console.log(`❌ Map generation cancelled - not all players ready (${confirmedPlayers}/${totalPlayers})`);
-            io.to(`db_game_${gameId}`).emit('map_generation_error', {
-                success: false,
-                message: `Kartengenerierung abgebrochen - nicht alle Spieler bereit (${confirmedPlayers}/${totalPlayers})`
-            });
+        // Spiel-Daten laden
+        const game = await db.query('SELECT * FROM games WHERE id = ?', [gameId]);
+        if (game.length === 0) {
+            console.error('Game not found for map generation');
             return;
         }
+
+        const gameData = game[0];
+        const mapSize = gameData.map_size;
         
-        console.log(`✅ Double-check passed - all ${totalPlayers} players are ready. Generating map...`);
+        // Spieler laden
+        const players = await db.query(`
+            SELECT id, player_name, race_id, turn_order 
+            FROM game_players 
+            WHERE game_id = ? AND is_active = 1 
+            ORDER BY turn_order
+        `, [gameId]);
+
+        // Terrain-Typen laden
+        const terrainTypes = await db.query('SELECT * FROM terrain_types ORDER BY id');
+        const buildingTypes = await db.query('SELECT * FROM building_types ORDER BY id');
+
+        // Karte generieren
+        console.log(`📊 Generating ${mapSize}x${mapSize} map for ${players.length} players`);
         
-        // Starte die tatsächliche Kartengenerierung
-        const mapResult = await mapController.generateMap(gameId);
-        
-        if (mapResult.success) {
-            console.log(`✅ Automatic map generation successful for game ${gameId}`);
-            
-            // Benachrichtige ALLE Spieler über erfolgreiche Kartengenerierung
-            io.to(`db_game_${gameId}`).emit('map_generated', {
-                success: true,
-                gameId: gameId,
-                mapSize: mapResult.mapSize,
-                playerCount: mapResult.playerCount,
-                message: 'Karte wurde erfolgreich generiert!'
-            });
-            
-            // Update game status to playing (falls noch nicht geschehen)
-            await db.query(
-                'UPDATE games SET status = "playing", started_at = NOW() WHERE id = ? AND status != "playing"',
-                [gameId]
-            );
-            
-            console.log(`🎮 Game ${gameId} is now PLAYING!`);
-            
-        } else {
-            console.error(`❌ Automatic map generation FAILED for game ${gameId}:`, mapResult.message);
-            
-            // Benachrichtige alle Spieler über Fehler
-            io.to(`db_game_${gameId}`).emit('map_generation_error', {
-                success: false,
-                message: mapResult.message || 'Unbekannter Fehler bei der automatischen Kartengenerierung'
-            });
+        // Lösche vorhandene Kartendaten
+        await db.query('DELETE FROM game_maps WHERE game_id = ?', [gameId]);
+
+        // Zufalls-Generator mit Seed für konsistente Ergebnisse
+        const seed = Date.now();
+        const random = () => {
+            const x = Math.sin(seed++) * 10000;
+            return x - Math.floor(x);
+        };
+
+        // Basis-Terrain generieren
+        for (let x = 0; x < mapSize; x++) {
+            for (let y = 0; y < mapSize; y++) {
+                // Terrain-Verteilung (angepasst für besseres Gameplay)
+                let terrainTypeId = 1; // Default: Gras
+                
+                const terrainRoll = random();
+                if (terrainRoll < 0.4) terrainTypeId = 1; // Gras (40%)
+                else if (terrainRoll < 0.55) terrainTypeId = 5; // Wald (15%)
+                else if (terrainRoll < 0.7) terrainTypeId = 2; // Berg (15%)
+                else if (terrainRoll < 0.8) terrainTypeId = 3; // Sumpf (10%)
+                else if (terrainRoll < 0.9) terrainTypeId = 6; // Wüste (10%)
+                else if (terrainRoll < 0.95) terrainTypeId = 4; // Wasser (5%)
+                else terrainTypeId = 7; // Schnee (5%)
+
+                await db.query(`
+                    INSERT INTO game_maps (game_id, x_coordinate, y_coordinate, terrain_type_id) 
+                    VALUES (?, ?, ?, ?)
+                `, [gameId, x, y, terrainTypeId]);
+            }
         }
+
+        // Spieler-Startpositionen generieren
+        const startPositions = generateStartPositions(mapSize, players.length);
         
+        for (let i = 0; i < players.length; i++) {
+            const player = players[i];
+            const startPos = startPositions[i];
+            
+            // Start-Stadt platzieren
+            await db.query(`
+                UPDATE game_maps 
+                SET building_type_id = 1, owner_player_id = ?
+                WHERE game_id = ? AND x_coordinate = ? AND y_coordinate = ?
+            `, [player.id, gameId, startPos.x, startPos.y]);
+            
+            console.log(`🏘️ Player ${player.player_name} starts at (${startPos.x}, ${startPos.y})`);
+        }
+
+        // Zusätzliche neutrale Gebäude
+        const neutralBuildings = Math.floor(mapSize * mapSize * 0.02); // 2% neutrale Gebäude
+        for (let i = 0; i < neutralBuildings; i++) {
+            let attempts = 0;
+            let placed = false;
+            
+            while (!placed && attempts < 50) {
+                const x = Math.floor(random() * mapSize);
+                const y = Math.floor(random() * mapSize);
+                
+                // Prüfe ob Position frei ist
+                const existing = await db.query(`
+                    SELECT building_type_id FROM game_maps 
+                    WHERE game_id = ? AND x_coordinate = ? AND y_coordinate = ?
+                `, [gameId, x, y]);
+                
+                if (existing[0].building_type_id === null) {
+                    // Zufälliges Gebäude (Stadt oder Burg)
+                    const buildingTypeId = random() < 0.7 ? 1 : 2; // 70% Stadt, 30% Burg
+                    
+                    await db.query(`
+                        UPDATE game_maps 
+                        SET building_type_id = ?
+                        WHERE game_id = ? AND x_coordinate = ? AND y_coordinate = ?
+                    `, [buildingTypeId, gameId, x, y]);
+                    
+                    placed = true;
+                }
+                attempts++;
+            }
+        }
+
+        // Zufällige Zugreihenfolge festlegen
+        const shuffledPlayers = [...players].sort(() => random() - 0.5);
+        for (let i = 0; i < shuffledPlayers.length; i++) {
+            await db.query(`
+                UPDATE game_players 
+                SET turn_order = ? 
+                WHERE id = ?
+            `, [i + 1, shuffledPlayers[i].id]);
+        }
+
+        // Spiel als "playing" markieren und ersten Spieler aktivieren
+        await db.query(`
+            UPDATE games 
+            SET status = 'playing', 
+                started_at = NOW(), 
+                current_turn_player_id = ?,
+                turn_number = 1
+            WHERE id = ?
+        `, [shuffledPlayers[0].id, gameId]);
+
+        console.log(`✅ Map generation completed for game ${gameId}`);
+        console.log(`🎲 Turn order: ${shuffledPlayers.map(p => p.player_name).join(' → ')}`);
+
+        // Allen Spielern mitteilen, dass die Karte fertig ist
+        io.to(`db_game_${gameId}`).emit('map_generated', {
+            success: true,
+            gameId: gameId,
+            mapSize: mapSize,
+            playerCount: players.length,
+            firstPlayer: shuffledPlayers[0].player_name,
+            message: `Karte generiert! ${shuffledPlayers[0].player_name} beginnt.`
+        });
+
+        // Kurz warten, dann zum Hauptspiel weiterleiten
+        setTimeout(() => {
+            io.to(`db_game_${gameId}`).emit('redirect_to_game', {
+                gameId: gameId,
+                status: 'playing'
+            });
+        }, 2000);
+
     } catch (error) {
-        console.error('ERROR in automatic map generation:', error);
+        console.error('Error in enhanced map generation:', error);
+        
+        // Fehler an Spieler weiterleiten
         io.to(`db_game_${gameId}`).emit('map_generation_error', {
             success: false,
-            message: 'Server-Fehler bei der automatischen Kartengenerierung: ' + error.message
+            message: 'Fehler bei der Kartengenerierung: ' + error.message
         });
     }
+}
+
+function generateStartPositions(mapSize, playerCount) {
+    const positions = [];
+    const margin = Math.max(2, Math.floor(mapSize * 0.1)); // 10% Rand-Abstand
+    
+    if (playerCount === 2) {
+        positions.push(
+            { x: margin, y: Math.floor(mapSize / 2) },
+            { x: mapSize - margin - 1, y: Math.floor(mapSize / 2) }
+        );
+    } else if (playerCount === 3) {
+        positions.push(
+            { x: margin, y: margin },
+            { x: mapSize - margin - 1, y: margin },
+            { x: Math.floor(mapSize / 2), y: mapSize - margin - 1 }
+        );
+    } else if (playerCount === 4) {
+        positions.push(
+            { x: margin, y: margin },
+            { x: mapSize - margin - 1, y: margin },
+            { x: margin, y: mapSize - margin - 1 },
+            { x: mapSize - margin - 1, y: mapSize - margin - 1 }
+        );
+    } else {
+        // Für mehr als 4 Spieler: Gleichmäßig um die Karte verteilen
+        for (let i = 0; i < playerCount; i++) {
+            const angle = (2 * Math.PI * i) / playerCount;
+            const radius = Math.floor(mapSize * 0.35);
+            const centerX = Math.floor(mapSize / 2);
+            const centerY = Math.floor(mapSize / 2);
+            
+            const x = Math.floor(centerX + radius * Math.cos(angle));
+            const y = Math.floor(centerY + radius * Math.sin(angle));
+            
+            positions.push({
+                x: Math.max(margin, Math.min(mapSize - margin - 1, x)),
+                y: Math.max(margin, Math.min(mapSize - margin - 1, y))
+            });
+        }
+    }
+    
+    return positions;
 }
 
 async function broadcastRaceSelectionSync(gameId) {
@@ -552,54 +693,97 @@ io.on('connection', (socket) => {
     }
 });
 
+    // Spieler tritt Spiel-Room bei
+    socket.on('join_game_room', (data) => {
+        gameHandlers.handleJoinGameRoom(socket, data);
+    });
+
+    // Einheit bewegen
+    socket.on('move_unit', (data) => {
+        gameHandlers.handleMoveUnit(socket, data);
+    });
+
+    // Einheit angreifen
+    socket.on('attack_unit', (data) => {
+        gameHandlers.handleAttackUnit(socket, data);
+    });
+
+    // Einheit kaufen
+    socket.on('buy_unit', (data) => {
+        gameHandlers.handleBuyUnit(socket, data);
+    });
+
+    // Spieler-Level erhöhen
+    socket.on('upgrade_level', (data) => {
+        gameHandlers.handleUpgradeLevel(socket, data);
+    });
+
+    // Zug beenden
+    socket.on('end_turn', (data) => {
+        gameHandlers.handleEndTurn(socket, data);
+    });
+
+    // Verfügbare Einheiten abrufen
+    socket.on('get_available_units', (data) => {
+        gameHandlers.handleGetAvailableUnits(socket, data);
+    });
+
+    // Spiel-Statistiken abrufen
+    socket.on('get_game_stats', (data) => {
+        gameHandlers.handleGetGameStats(socket, data);
+    });
+
+    // Game Chat
+    socket.on('send_game_chat', (data) => {
+        gameHandlers.handleGameChatMessage(socket, data);
+    });
+
+    // Spiel verlassen
+    socket.on('leave_game', (data) => {
+        gameHandlers.handleLeaveGame(socket, data);
+    });
+
 // WICHTIG: Auch bei disconnect die Updates senden
-    socket.on('disconnect', () => {
+socket.on('disconnect', () => {
     try {
         console.log(`🔌 Socket ${socket.id} disconnected`);
         
+        // Hole Spielerdaten BEVOR cleanup
         const playerData = improvedLobbyManager.players.get(socket.id);
+        const dbGamePlayerData = dbGamePlayers.get(socket.id);
         
-        // Clean up lobby manager
+        // === GAME HANDLERS CLEANUP ZUERST ===
+        // Game Disconnect Handler (für laufende Spiele)
+        if (gameHandlers) {
+            gameHandlers.handleDisconnect(socket);
+        }
+        
+        // === LOBBY CLEANUP ===
         if (playerData) {
             const gameId = playerData.gameId;
             const playerName = playerData.name;
             
-            console.log(`🧹 Cleaning up disconnected player ${playerName} from game ${gameId}`);
+            console.log(`🧹 Cleaning up lobby player ${playerName} from game ${gameId}`);
             
-            // Clean up chat BEFORE leaving game
+            // Chat cleanup BEVOR leaving game
             if (socket.playerName && socket.gameId) {
-                const chatRoom = getChatRoom(socket.gameId);
-                if (chatRoom.players.has(socket.id)) {
-                    chatRoom.players.delete(socket.id);
-                    
-                    // Notify remaining players
-                    socket.to(`chat_${socket.gameId}`).emit('chat_player_left', {
-                        playerName: socket.playerName,
-                        playerCount: chatRoom.players.size
-                    });
-                    
-                    // Update player count
-                    io.to(`chat_${socket.gameId}`).emit('chat_player_count', {
-                        count: chatRoom.players.size
-                    });
-                    
-                    console.log(`🗨️ Cleaned up chat for disconnected player ${playerName}`);
-                }
+                cleanupChatForPlayer(socket);
             }
             
-            // ✅ KORRIGIERT: Verwende leaveGame statt removePlayer
+            // ✅ KORRIGIERT: Verwende leaveGame
             const result = improvedLobbyManager.leaveGame(socket.id);
             
             if (result.success && !result.gameDeleted) {
-                // Notify remaining players about disconnect
+                // Benachrichtige verbleibende Spieler
                 socket.to(`game_${gameId}`).emit('player_left', {
-                    playerName: playerName
+                    playerName: playerName,
+                    message: `${playerName} hat die Verbindung verloren`
                 });
                 
-                // WICHTIG: Send updated player list
+                // Aktualisierte Spielerliste senden
                 io.to(`game_${gameId}`).emit('lobby_players_updated', result.players);
                 
-                // WICHTIG: Update player count
+                // Spiel-Info aktualisieren
                 io.to(`game_${gameId}`).emit('game_info_updated', {
                     currentPlayers: result.players.length,
                     maxPlayers: result.maxPlayers || 8,
@@ -609,54 +793,88 @@ io.on('connection', (socket) => {
                 console.log(`📊 Updated ${result.players.length} remaining players after disconnect`);
             }
             
-            // Update games list
+            // Globale Spieleliste aktualisieren
             io.emit('games_updated', improvedLobbyManager.getAvailableGames());
+        } else {
+            // Auch ohne playerData den lobby manager cleanup aufrufen
+            improvedLobbyManager.handleDisconnect(socket);
+        }
+        
+        // === DATABASE GAME CLEANUP ===
+        if (dbGamePlayerData) {
+            const { playerName, gameId } = dbGamePlayerData;
+            console.log(`📤 DB Game player disconnected: ${playerName} from game ${gameId}`);
             
-            console.log(`✅ Player ${playerName} cleanup completed`);
+            // Aus dbGamePlayers entfernen
+            dbGamePlayers.delete(socket.id);
+            
+            // Benachrichtige andere Spieler im DB-Spiel
+            socket.to(`db_game_${gameId}`).emit('player_disconnected', {
+                playerName: playerName,
+                message: `${playerName} hat die Verbindung verloren`
+            });
         }
-        // ❌ ENTFERNT: Diese Zeile war der Fehler
-        // improvedLobbyManager.removePlayer(socket.id);
         
-        // Clean up database game players
-        dbGamePlayers.forEach((players, gameId) => {
-            if (players.has(socket.id)) {
-                players.delete(socket.id);
-                console.log(`🗃️ Removed ${socket.id} from DB game ${gameId}`);
-                
-                if (players.size === 0) {
-                    dbGamePlayers.delete(gameId);
-                    console.log(`🗃️ Removed empty DB game ${gameId}`);
-                }
-            }
-        });
+        // === HEARTBEAT CLEANUP ===
+        if (heartbeats.has(socket.id)) {
+            clearInterval(heartbeats.get(socket.id));
+            heartbeats.delete(socket.id);
+            console.log(`💓 Heartbeat cleaned up for ${socket.id}`);
+        }
         
-        // Clean up chat rooms
+        // === CHAT CLEANUP (falls noch nicht gemacht) ===
         if (socket.playerName && socket.gameId) {
-            const chatRoom = getChatRoom(socket.gameId);
-            if (chatRoom.players.has(socket.id)) {
-                chatRoom.players.delete(socket.id);
-                
-                // Notify remaining players
-                socket.to(`chat_${socket.gameId}`).emit('chat_player_left', {
-                    playerName: socket.playerName,
-                    playerCount: chatRoom.players.size
-                });
-                
-                // Update player count
-                io.to(`chat_${socket.gameId}`).emit('chat_player_count', {
-                    count: chatRoom.players.size
-                });
-                
-                console.log(`🧹 Final chat cleanup for disconnected player ${socket.playerName}`);
-            }
+            cleanupChatForPlayer(socket);
         }
         
-        console.log(`🔌 Disconnect cleanup completed for ${socket.id}`);
+        console.log(`✅ Disconnect cleanup completed for ${socket.id}`);
         
     } catch (error) {
         console.error('❌ Error during disconnect cleanup:', error);
+        
+        // Fallback cleanup - falls error auftritt, trotzdem grundlegende cleanup versuchen
+        try {
+            if (heartbeats.has(socket.id)) {
+                clearInterval(heartbeats.get(socket.id));
+                heartbeats.delete(socket.id);
+            }
+            
+            dbGamePlayers.delete(socket.id);
+            
+            improvedLobbyManager.handleDisconnect(socket);
+            
+        } catch (fallbackError) {
+            console.error('❌ Error in fallback cleanup:', fallbackError);
+        }
     }
 });
+
+// === HELPER FUNCTION FÜR CHAT CLEANUP ===
+function cleanupChatForPlayer(socket) {
+    try {
+        if (!socket.playerName || !socket.gameId) return;
+        
+        const chatRoom = getChatRoom(socket.gameId);
+        if (chatRoom && chatRoom.players.has(socket.id)) {
+            chatRoom.players.delete(socket.id);
+            
+            // Benachrichtige verbleibende Chat-Teilnehmer
+            socket.to(`chat_${socket.gameId}`).emit('chat_player_left', {
+                playerName: socket.playerName,
+                playerCount: chatRoom.players.size
+            });
+            
+            // Update player count
+            io.to(`chat_${socket.gameId}`).emit('chat_player_count', {
+                count: chatRoom.players.size
+            });
+            
+            console.log(`🗨️ Chat cleanup completed for ${socket.playerName}`);
+        }
+    } catch (error) {
+        console.error('Error in chat cleanup:', error);
+    }
+}
 
     socket.on('start_game', async (data) => {
     try {

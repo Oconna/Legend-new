@@ -15,12 +15,12 @@
         <div class="loading-subtext">Karte wird generiert und Spielzustand geladen</div>
     </div>
 
-    <!-- Notification -->
+    <!-- Notification System -->
     <div id="notifications" class="notifications"></div>
 
     <!-- Game Container -->
     <div id="gameContainer" class="game-container" style="display: none;">
-        <!-- Sidebar -->
+        <!-- Left Sidebar -->
         <div class="game-sidebar">
             <!-- Game Info -->
             <div class="sidebar-section game-info">
@@ -34,7 +34,7 @@
                     <span id="mapSize">30x30</span>
                 </div>
                 <div class="info-item">
-                    <span>Aktueller Spieler:</span>
+                    <span>Am Zug:</span>
                     <span id="currentPlayer">-</span>
                 </div>
             </div>
@@ -47,61 +47,456 @@
                 </div>
             </div>
 
-            <!-- Game Stats -->
+            <!-- Player Stats -->
             <div class="sidebar-section">
                 <h3>Meine Statistiken</h3>
-                <div class="info-item">
-                    <span>Gold:</span>
-                    <span id="playerGold">1000</span>
+                <div class="player-stats">
+                    <div class="info-item">
+                        <span>Gold:</span>
+                        <span id="playerGold">1000</span>
+                    </div>
+                    <div class="info-item">
+                        <span>Level:</span>
+                        <span id="playerLevel">1</span>
+                    </div>
+                    <div class="info-item">
+                        <span>Städte:</span>
+                        <span id="playerCities">0</span>
+                    </div>
+                    <div class="info-item">
+                        <span>Burgen:</span>
+                        <span id="playerCastles">0</span>
+                    </div>
+                    <div class="info-item">
+                        <span>Einheiten:</span>
+                        <span id="playerUnits">0</span>
+                    </div>
                 </div>
-                <div class="info-item">
-                    <span>Städte:</span>
-                    <span id="playerCities">0</span>
-                </div>
-                <div class="info-item">
-                    <span>Burgen:</span>
-                    <span id="playerCastles">0</span>
-                </div>
-                <div class="info-item">
-                    <span>Einheiten:</span>
-                    <span id="playerUnits">0</span>
+            </div>
+
+            <!-- Selected Unit Info -->
+            <div class="sidebar-section" id="selectedUnitSection" style="display: none;">
+                <h3>Ausgewählte Einheit</h3>
+                <div id="selectedUnitInfo">
+                    <p>Keine Einheit ausgewählt</p>
                 </div>
             </div>
 
             <!-- Action Buttons -->
             <div class="action-buttons">
-                <button id="endTurnBtn" class="btn btn-primary" disabled>
+                <button id="buyUnitBtn" class="btn btn-primary" disabled>
+                    Einheit kaufen
+                </button>
+                <button id="upgradeLevelBtn" class="btn btn-secondary" disabled>
+                    Level erhöhen
+                </button>
+                <button id="endTurnBtn" class="btn btn-success" disabled>
                     Zug beenden
                 </button>
-                <button id="centerMapBtn" class="btn btn-secondary">
-                    Karte zentrieren
-                </button>
-                <button id="leaveGameBtn" class="btn btn-danger">
-                    Spiel verlassen
-                </button>
+            </div>
+
+            <!-- Game Controls -->
+            <div class="game-controls">
+                <h3>Steuerung</h3>
+                <div class="control-hints">
+                    <div class="hint-item">
+                        <kbd>ESC</kbd> - Auswahl aufheben
+                    </div>
+                    <div class="hint-item">
+                        <kbd>M</kbd> - Bewegen (bei ausgewählter Einheit)
+                    </div>
+                    <div class="hint-item">
+                        <kbd>A</kbd> - Angreifen (bei ausgewählter Einheit)
+                    </div>
+                    <div class="hint-item">
+                        <kbd>B</kbd> - Einheitenkauf-Modus
+                    </div>
+                    <div class="hint-item">
+                        <kbd>ENTER</kbd> - Zug beenden
+                    </div>
+                </div>
             </div>
         </div>
 
-        <!-- Map Container -->
-        <div class="map-container">
-            <!-- Map Controls -->
-            <div class="map-controls">
-                <button class="control-btn" id="zoomInBtn" title="Vergrößern (+)">+</button>
-                <button class="control-btn" id="zoomToActiveTileBtn" title="ZoomActiveTile (+)">+</button>
-                <button class="control-btn" id="zoomOutBtn" title="Verkleinern (-)">-</button>
-                <button class="control-btn" id="resetZoomBtn" title="Zoom zurücksetzen (0)">Reset</button>
+        <!-- Main Game Area -->
+        <div class="game-main">
+            <!-- Game Header Bar -->
+            <div class="game-header-bar">
+                <div class="game-title">
+                    <h1 id="gameTitle">Strategiespiel</h1>
+                    <div class="game-status">
+                        <span id="gameStatus">Lädt...</span>
+                    </div>
+                </div>
+                
+                <div class="game-actions">
+                    <div class="zoom-controls">
+                        <button id="zoomOutBtn" class="btn btn-small">-</button>
+                        <span id="zoomLevel">100%</span>
+                        <button id="zoomInBtn" class="btn btn-small">+</button>
+                    </div>
+                    <button id="centerMapBtn" class="btn btn-small">Zentrieren</button>
+                    <button id="leaveGameBtn" class="btn btn-danger btn-small">Spiel verlassen</button>
+                </div>
             </div>
 
-            <!-- Map Viewport -->
-            <div id="mapViewport" class="map-viewport">
-                <div id="mapGrid" class="map-grid">
-                    <!-- Map tiles will be generated by JavaScript -->
+            <!-- Game Canvas Container -->
+            <div class="canvas-container">
+                <canvas id="gameCanvas" width="800" height="600"></canvas>
+                
+                <!-- Canvas Overlay for UI Elements -->
+                <div class="canvas-overlay">
+                    <div id="actionPanel" class="action-panel" style="display: none;">
+                        <h4>Aktionen</h4>
+                        <div class="action-buttons-overlay">
+                            <button id="moveActionBtn" class="btn btn-primary btn-small">Bewegen</button>
+                            <button id="attackActionBtn" class="btn btn-danger btn-small">Angreifen</button>
+                            <button id="cancelActionBtn" class="btn btn-secondary btn-small">Abbrechen</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Turn Indicator -->
+            <div id="turnIndicator" class="turn-indicator">
+                <div id="turnIndicatorContent">
+                    <span id="turnIndicatorText">Warte auf Spielzustand...</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Sidebar (Chat) -->
+        <div class="game-sidebar-right">
+            <div class="sidebar-section">
+                <h3>Spielchat</h3>
+                <div class="chat-container">
+                    <div id="gameChatMessages" class="chat-messages">
+                        <!-- Chat messages will be populated here -->
+                    </div>
+                    <div class="chat-input-container">
+                        <input type="text" id="gameChatInput" placeholder="Nachricht eingeben..." maxlength="200">
+                        <button id="sendChatBtn" class="btn btn-primary btn-small">Senden</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Mini Map (Optional) -->
+            <div class="sidebar-section">
+                <h3>Minikarte</h3>
+                <div class="mini-map-container">
+                    <canvas id="miniMap" width="150" height="150"></canvas>
                 </div>
             </div>
         </div>
     </div>
 
+    <!-- Unit Purchase Modal (wird durch JavaScript eingefügt) -->
+
+    <!-- Scripts -->
     <script src="/socket.io/socket.io.js"></script>
-    <script src="js/game.js"></script>
+    <script src="js/unitPurchaseModal.js"></script>
+    <script src="js/gameRenderer.js"></script>
+    <script src="js/gameManager.js"></script>
+
+    <script>
+        // Global game initialization
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('🎮 Game page loaded');
+            
+            // Game will be initialized by gameManager.js
+            // gameManager is created as global instance there
+        });
+
+        // Global functions for inline event handlers
+        window.showUnitPurchaseModal = function(buildingX, buildingY, buildingName) {
+            if (window.gameManager && window.gameManager.unitPurchaseModal) {
+                window.gameManager.unitPurchaseModal.show(buildingX, buildingY, buildingName);
+            }
+        };
+
+        window.setActionMode = function(mode) {
+            if (window.gameManager) {
+                window.gameManager.setActionMode(mode);
+            }
+        };
+
+        // Error handling
+        window.addEventListener('error', (e) => {
+            console.error('Global error:', e.error);
+            
+            if (window.gameManager) {
+                window.gameManager.showError('Ein Fehler ist aufgetreten: ' + e.message);
+            }
+        });
+
+        // Prevent context menu on canvas
+        document.addEventListener('contextmenu', (e) => {
+            if (e.target.tagName === 'CANVAS') {
+                e.preventDefault();
+            }
+        });
+    </script>
+
+    <style>
+        /* Additional inline styles for game-specific elements */
+        .loading-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+
+        .loading-spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .loading-text {
+            color: white;
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        .loading-subtext {
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 16px;
+        }
+
+        .notifications {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+
+        .notification {
+            background: white;
+            border-left: 4px solid #3498db;
+            border-radius: 4px;
+            padding: 15px 20px;
+            margin-bottom: 10px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            max-width: 300px;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        .notification-success {
+            border-left-color: #2ecc71;
+        }
+
+        .notification-error {
+            border-left-color: #e74c3c;
+        }
+
+        .notification-warning {
+            border-left-color: #f39c12;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        .canvas-container {
+            position: relative;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .canvas-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+
+        .action-panel {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 8px;
+            padding: 15px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            pointer-events: auto;
+        }
+
+        .action-panel h4 {
+            margin: 0 0 10px 0;
+            font-size: 16px;
+            color: #2c3e50;
+        }
+
+        .action-buttons-overlay {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .turn-indicator {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-weight: bold;
+            z-index: 100;
+        }
+
+        .game-header-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            background: rgba(255, 255, 255, 0.95);
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .game-title h1 {
+            margin: 0;
+            font-size: 24px;
+            color: #2c3e50;
+        }
+
+        .game-status {
+            font-size: 14px;
+            color: #7f8c8d;
+        }
+
+        .game-actions {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .zoom-controls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .game-sidebar-right {
+            width: 300px;
+            background: rgba(255, 255, 255, 0.95);
+            border-left: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .chat-container {
+            display: flex;
+            flex-direction: column;
+            height: 300px;
+        }
+
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 4px;
+            margin-bottom: 10px;
+        }
+
+        .chat-input-container {
+            display: flex;
+            gap: 5px;
+        }
+
+        .chat-input-container input {
+            flex: 1;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        .mini-map-container {
+            text-align: center;
+            padding: 10px;
+        }
+
+        .control-hints {
+            font-size: 12px;
+        }
+
+        .hint-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 5px;
+            color: #666;
+        }
+
+        kbd {
+            background: #f8f9fa;
+            border: 1px solid #ddd;
+            border-radius: 3px;
+            padding: 2px 6px;
+            font-size: 11px;
+            color: #333;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 1200px) {
+            .game-sidebar-right {
+                display: none;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .game-container {
+                flex-direction: column;
+            }
+            
+            .game-sidebar {
+                width: 100%;
+                height: auto;
+                max-height: 200px;
+                overflow-y: auto;
+            }
+            
+            .game-main {
+                flex: 1;
+            }
+            
+            .game-header-bar {
+                flex-direction: column;
+                gap: 10px;
+                align-items: flex-start;
+            }
+            
+            .game-actions {
+                width: 100%;
+                justify-content: space-between;
+            }
+        }
+    </style>
 </body>
 </html>

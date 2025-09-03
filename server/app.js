@@ -99,12 +99,12 @@ function validateChatMessage(message) {
     return { valid: true, message: trimmed };
 }
 
-async function startAutomaticMapGeneration(gameId) {
+async function startAutomaticMapGeneration(gameDbId) {
     try {
-        console.log(`🗺️ Starting enhanced map generation for game ${gameId}`);
+        console.log(`🗺️ Starting enhanced map generation for game ${gameDbId}`);
         
         // Spiel-Daten laden
-        const game = await db.query('SELECT * FROM games WHERE id = ?', [gameId]);
+        const game = await db.query('SELECT * FROM games WHERE id = ?', [gameDbId]);
         if (game.length === 0) {
             console.error('Game not found for map generation');
             return;
@@ -119,7 +119,7 @@ async function startAutomaticMapGeneration(gameId) {
             FROM game_players 
             WHERE game_id = ? AND is_active = 1 
             ORDER BY turn_order
-        `, [gameId]);
+        `, [gameDbId]);
 
         // Terrain-Typen laden
         const terrainTypes = await db.query('SELECT * FROM terrain_types ORDER BY id');
@@ -129,10 +129,10 @@ async function startAutomaticMapGeneration(gameId) {
         console.log(`📊 Generating ${mapSize}x${mapSize} map for ${players.length} players`);
         
         // Lösche vorhandene Kartendaten
-        await db.query('DELETE FROM game_maps WHERE game_id = ?', [gameId]);
+        await db.query('DELETE FROM game_maps WHERE game_id = ?', [gameDbId]);
 
-        // Zufalls-Generator mit Seed für konsistente Ergebnisse
-        const seed = Date.now();
+        // ✅ KORRIGIERT: Zufalls-Generator mit veränderbarem Seed
+        let seed = Date.now();
         const random = () => {
             const x = Math.sin(seed++) * 10000;
             return x - Math.floor(x);
@@ -156,7 +156,7 @@ async function startAutomaticMapGeneration(gameId) {
                 await db.query(`
                     INSERT INTO game_maps (game_id, x_coordinate, y_coordinate, terrain_type_id) 
                     VALUES (?, ?, ?, ?)
-                `, [gameId, x, y, terrainTypeId]);
+                `, [gameDbId, x, y, terrainTypeId]);
             }
         }
 
@@ -172,7 +172,7 @@ async function startAutomaticMapGeneration(gameId) {
                 UPDATE game_maps 
                 SET building_type_id = 1, owner_player_id = ?
                 WHERE game_id = ? AND x_coordinate = ? AND y_coordinate = ?
-            `, [player.id, gameId, startPos.x, startPos.y]);
+            `, [player.id, gameDbId, startPos.x, startPos.y]);
             
             console.log(`🏘️ Player ${player.player_name} starts at (${startPos.x}, ${startPos.y})`);
         }
@@ -191,9 +191,9 @@ async function startAutomaticMapGeneration(gameId) {
                 const existing = await db.query(`
                     SELECT building_type_id FROM game_maps 
                     WHERE game_id = ? AND x_coordinate = ? AND y_coordinate = ?
-                `, [gameId, x, y]);
+                `, [gameDbId, x, y]);
                 
-                if (existing[0].building_type_id === null) {
+                if (existing[0] && existing[0].building_type_id === null) {
                     // Zufälliges Gebäude (Stadt oder Burg)
                     const buildingTypeId = random() < 0.7 ? 1 : 2; // 70% Stadt, 30% Burg
                     
@@ -201,7 +201,7 @@ async function startAutomaticMapGeneration(gameId) {
                         UPDATE game_maps 
                         SET building_type_id = ?
                         WHERE game_id = ? AND x_coordinate = ? AND y_coordinate = ?
-                    `, [buildingTypeId, gameId, x, y]);
+                    `, [buildingTypeId, gameDbId, x, y]);
                     
                     placed = true;
                 }
@@ -209,8 +209,10 @@ async function startAutomaticMapGeneration(gameId) {
             }
         }
 
-        // Zufällige Zugreihenfolge festlegen
-        const shuffledPlayers = [...players].sort(() => random() - 0.5);
+        // ✅ KORRIGIERT: Zufällige Zugreihenfolge mit Array shuffle
+        const shuffledPlayers = shuffleArray([...players], random);
+        
+        // Turn order zuweisen
         for (let i = 0; i < shuffledPlayers.length; i++) {
             await db.query(`
                 UPDATE game_players 
@@ -227,25 +229,26 @@ async function startAutomaticMapGeneration(gameId) {
                 current_turn_player_id = ?,
                 turn_number = 1
             WHERE id = ?
-        `, [shuffledPlayers[0].id, gameId]);
+        `, [shuffledPlayers[0].id, gameDbId]);
 
-        console.log(`✅ Map generation completed for game ${gameId}`);
+        console.log(`✅ Map generation completed for game ${gameDbId}`);
         console.log(`🎲 Turn order: ${shuffledPlayers.map(p => p.player_name).join(' → ')}`);
 
         // Allen Spielern mitteilen, dass die Karte fertig ist
-        io.to(`db_game_${gameId}`).emit('map_generated', {
+        io.to(`db_game_${gameDbId}`).emit('map_generated', {
             success: true,
-            gameId: gameId,
+            gameId: gameDbId,
             mapSize: mapSize,
             playerCount: players.length,
             firstPlayer: shuffledPlayers[0].player_name,
+            turnOrder: shuffledPlayers.map(p => p.player_name),
             message: `Karte generiert! ${shuffledPlayers[0].player_name} beginnt.`
         });
 
         // Kurz warten, dann zum Hauptspiel weiterleiten
         setTimeout(() => {
-            io.to(`db_game_${gameId}`).emit('redirect_to_game', {
-                gameId: gameId,
+            io.to(`db_game_${gameDbId}`).emit('redirect_to_game', {
+                gameId: gameDbId,
                 status: 'playing'
             });
         }, 2000);
@@ -254,16 +257,26 @@ async function startAutomaticMapGeneration(gameId) {
         console.error('Error in enhanced map generation:', error);
         
         // Fehler an Spieler weiterleiten
-        io.to(`db_game_${gameId}`).emit('map_generation_error', {
+        io.to(`db_game_${gameDbId}`).emit('map_generation_error', {
             success: false,
             message: 'Fehler bei der Kartengenerierung: ' + error.message
         });
     }
 }
 
+function shuffleArray(array, randomFunc) {
+    const result = [...array];
+    for (let i = result.length - 1; i > 0; i--) {
+        const j = Math.floor(randomFunc() * (i + 1));
+        [result[i], result[j]] = [result[j], result[i]];
+    }
+    return result;
+}
+
 function generateStartPositions(mapSize, playerCount) {
     const positions = [];
     const margin = Math.max(2, Math.floor(mapSize * 0.1)); // 10% Rand-Abstand
+    const safeMargin = Math.max(1, Math.floor(mapSize * 0.05)); // 5% zusätzlicher Abstand
     
     if (playerCount === 2) {
         positions.push(
@@ -298,6 +311,26 @@ function generateStartPositions(mapSize, playerCount) {
                 x: Math.max(margin, Math.min(mapSize - margin - 1, x)),
                 y: Math.max(margin, Math.min(mapSize - margin - 1, y))
             });
+        }
+    }
+    
+    // ✅ VERBESSERUNG: Mindestabstand zwischen Spielern sicherstellen
+    if (positions.length > 1) {
+        const minDistance = Math.floor(mapSize * 0.15); // 15% der Kartengröße als Mindestabstand
+        
+        for (let i = 1; i < positions.length; i++) {
+            for (let j = 0; j < i; j++) {
+                const distance = Math.abs(positions[i].x - positions[j].x) + Math.abs(positions[i].y - positions[j].y);
+                
+                if (distance < minDistance) {
+                    // Position anpassen wenn zu nah
+                    const angle = Math.atan2(positions[i].y - positions[j].y, positions[i].x - positions[j].x);
+                    positions[i].x = Math.max(margin, Math.min(mapSize - margin - 1, 
+                        Math.floor(positions[j].x + minDistance * Math.cos(angle))));
+                    positions[i].y = Math.max(margin, Math.min(mapSize - margin - 1, 
+                        Math.floor(positions[j].y + minDistance * Math.sin(angle))));
+                }
+            }
         }
     }
     

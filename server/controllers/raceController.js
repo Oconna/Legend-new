@@ -1,4 +1,4 @@
-// Race Selection Controller - server/controllers/raceController.js
+// server/controllers/raceController.js - Verbesserte Fehlerbehandlung
 const db = require('../config/database');
 
 class RaceController {
@@ -70,10 +70,11 @@ class RaceController {
         try {
             console.log(`Player ${playerName} selecting race ${raceId} for game ${gameId}`);
 
-            // Prüfe ob das Spiel in der Rassenauswahl-Phase ist
-            const game = await db.query(
+            // ✅ VERBESSERTE DATENBANKABFRAGE mit Retry
+            const game = await this.queryWithRetry(
                 'SELECT id, status FROM games WHERE id = ? AND status = "race_selection"',
-                [gameId]
+                [gameId],
+                'check game status'
             );
 
             if (game.length === 0) {
@@ -81,34 +82,53 @@ class RaceController {
             }
 
             // Prüfe ob die Rasse existiert
-            const race = await db.query('SELECT id, name FROM races WHERE id = ?', [raceId]);
+            const race = await this.queryWithRetry(
+                'SELECT id, name FROM races WHERE id = ?',
+                [raceId],
+                'check race exists'
+            );
+
             if (race.length === 0) {
                 return { success: false, message: 'Rasse nicht gefunden' };
             }
 
-            // Prüfe ob der Spieler existiert
-            const player = await db.query(
-                'SELECT id, player_name FROM game_players WHERE game_id = ? AND player_name = ?',
-                [gameId, playerName]
+            // Prüfe ob Spieler existiert
+            const player = await this.queryWithRetry(
+                'SELECT id FROM game_players WHERE game_id = ? AND player_name = ? AND is_active = 1',
+                [gameId, playerName],
+                'check player exists'
             );
 
             if (player.length === 0) {
                 return { success: false, message: 'Spieler nicht in diesem Spiel gefunden' };
             }
 
-            // Update Spieler mit ausgewählter Rasse (noch nicht bestätigt)
-            await db.query(
-                'UPDATE game_players SET race_id = ?, race_confirmed = 0 WHERE game_id = ? AND player_name = ?',
-                [raceId, gameId, playerName]
-            );
+            // Prüfe ob Rasse bereits von anderem Spieler gewählt wurde
+            const existingSelection = await this.queryWithRetry(`
+                SELECT player_name FROM game_players 
+                WHERE game_id = ? AND race_id = ? AND player_name != ? AND is_active = 1
+            `, [gameId, raceId, playerName], 'check race availability');
 
-            console.log(`✓ Race ${race[0].name} selected for player ${playerName}`);
+            if (existingSelection.length > 0) {
+                return { 
+                    success: false, 
+                    message: `Rasse bereits von ${existingSelection[0].player_name} gewählt` 
+                };
+            }
+
+            // Rasse für Spieler setzen (noch nicht bestätigt)
+            await this.queryWithRetry(`
+                UPDATE game_players 
+                SET race_id = ?, is_ready = 0 
+                WHERE game_id = ? AND player_name = ?
+            `, [raceId, gameId, playerName], 'select race');
+
+            console.log(`✅ Race ${race[0].name} selected by ${playerName}`);
 
             return {
                 success: true,
-                playerName: playerName,
-                raceId: raceId,
-                raceName: race[0].name
+                race: race[0],
+                message: `Rasse ${race[0].name} ausgewählt`
             };
 
         } catch (error) {
@@ -117,367 +137,262 @@ class RaceController {
         }
     }
 
-    // Spieler bestätigt seine Rassenauswahl
-    async confirmRace(gameId, playerName, raceId) {
-        try {
-            console.log(`Player ${playerName} confirming race ${raceId} for game ${gameId}`);
+    // Spieler bestätigt seine Rassenwahl
+    async confirmRaceSelection(gameId, playerName, raceId) {
+        let retryCount = 0;
+        const maxRetries = 3;
+        
+        while (retryCount < maxRetries) {
+            try {
+                console.log(`Confirming race selection: ${playerName} -> Race ${raceId} in game ${gameId}`);
 
-            // Prüfe ob das Spiel in der Rassenauswahl-Phase ist
-            const game = await db.query(
-                'SELECT id, status FROM games WHERE id = ? AND status = "race_selection"',
-                [gameId]
-            );
+                // ✅ TRANSACTION für Atomicity
+                const result = await db.transaction(async (connection) => {
+                    // Spiel-Status prüfen
+                    const [gameRows] = await connection.execute(
+                        'SELECT id, status FROM games WHERE id = ? AND status = "race_selection"',
+                        [gameId]
+                    );
 
-            if (game.length === 0) {
-                return { success: false, message: 'Spiel nicht gefunden oder nicht in Rassenauswahl-Phase' };
+                    if (gameRows.length === 0) {
+                        throw new Error('Spiel nicht gefunden oder nicht in Rassenauswahl-Phase');
+                    }
+
+                    // Rasse und Spieler prüfen
+                    const [raceRows] = await connection.execute(
+                        'SELECT id, name FROM races WHERE id = ?',
+                        [raceId]
+                    );
+
+                    if (raceRows.length === 0) {
+                        throw new Error('Rasse nicht gefunden');
+                    }
+
+                    const [playerRows] = await connection.execute(
+                        'SELECT id, race_id FROM game_players WHERE game_id = ? AND player_name = ? AND is_active = 1',
+                        [gameId, playerName]
+                    );
+
+                    if (playerRows.length === 0) {
+                        throw new Error('Spieler nicht in diesem Spiel gefunden');
+                    }
+
+                    const player = playerRows[0];
+
+                    // Prüfe ob Rasse immer noch verfügbar ist
+                    const [conflictRows] = await connection.execute(`
+                        SELECT player_name FROM game_players 
+                        WHERE game_id = ? AND race_id = ? AND player_name != ? AND is_active = 1 AND is_ready = 1
+                    `, [gameId, raceId, playerName]);
+
+                    if (conflictRows.length > 0) {
+                        throw new Error(`Rasse bereits von ${conflictRows[0].player_name} bestätigt`);
+                    }
+
+                    // Rassenwahl bestätigen
+                    const [updateResult] = await connection.execute(`
+                        UPDATE game_players 
+                        SET race_id = ?, is_ready = 1 
+                        WHERE game_id = ? AND player_name = ? AND is_active = 1
+                    `, [raceId, gameId, playerName]);
+
+                    if (updateResult.affectedRows === 0) {
+                        throw new Error('Fehler beim Bestätigen der Rassenwahl');
+                    }
+
+                    // Alle Spieler laden um zu prüfen ob alle bereit sind
+                    const [allPlayersRows] = await connection.execute(`
+                        SELECT id, player_name, race_id, is_ready 
+                        FROM game_players 
+                        WHERE game_id = ? AND is_active = 1 
+                        ORDER BY joined_at
+                    `, [gameId]);
+
+                    return {
+                        race: raceRows[0],
+                        allPlayers: allPlayersRows,
+                        playerId: player.id
+                    };
+                });
+
+                // Prüfe ob alle Spieler bereit sind
+                const allReady = result.allPlayers.every(p => p.is_ready && p.race_id);
+                const confirmedCount = result.allPlayers.filter(p => p.is_ready && p.race_id).length;
+
+                console.log(`✅ Race confirmed for ${playerName}. Ready players: ${confirmedCount}/${result.allPlayers.length}`);
+
+                return {
+                    success: true,
+                    race: result.race,
+                    allReady: allReady,
+                    confirmedPlayers: confirmedCount,
+                    totalPlayers: result.allPlayers.length,
+                    players: result.allPlayers,
+                    message: `Rasse ${result.race.name} bestätigt`
+                };
+
+            } catch (error) {
+                retryCount++;
+                console.error(`Error confirming race selection (attempt ${retryCount}/${maxRetries}):`, error);
+                
+                if (this.isRetryableError(error) && retryCount < maxRetries) {
+                    console.log(`🔄 Retrying race confirmation in ${1000 * retryCount}ms...`);
+                    await this.sleep(1000 * retryCount);
+                    continue;
+                }
+                
+                return { 
+                    success: false, 
+                    message: 'Fehler beim Bestätigen der Rassenwahl: ' + error.message 
+                };
             }
-
-            // Prüfe ob der Spieler die Rasse bereits ausgewählt hat
-            const player = await db.query(
-                'SELECT id, race_id FROM game_players WHERE game_id = ? AND player_name = ? AND race_id = ?',
-                [gameId, playerName, raceId]
-            );
-
-            if (player.length === 0) {
-                return { success: false, message: 'Rasse muss zuerst ausgewählt werden' };
-            }
-
-            // Bestätige die Rassenauswahl
-            await db.query(
-                'UPDATE game_players SET race_confirmed = 1 WHERE game_id = ? AND player_name = ? AND race_id = ?',
-                [gameId, playerName, raceId]
-            );
-
-            console.log(`✓ Race confirmed for player ${playerName}`);
-
-            // Prüfe ob alle Spieler ihre Rasse bestätigt haben
-            const allPlayersReady = await this.checkAllPlayersReady(gameId);
-
-            return {
-                success: true,
-                playerName: playerName,
-                raceId: raceId,
-                allReady: allPlayersReady.allReady,
-                readyCount: allPlayersReady.readyCount,
-                totalCount: allPlayersReady.totalCount
-            };
-
-        } catch (error) {
-            console.error('Error confirming race:', error);
-            return { success: false, message: 'Fehler bei der Rassenbestätigung: ' + error.message };
         }
     }
 
-    // Spieler deselektiert seine Rasse (um sie zu ändern)
+    // Spieler macht Rassenwahl rückgängig
     async deselectRace(gameId, playerName) {
         try {
-            console.log(`Player ${playerName} deselecting race for game ${gameId}`);
+            console.log(`Player ${playerName} deselecting race in game ${gameId}`);
 
-            // Prüfe ob das Spiel in der Rassenauswahl-Phase ist
-            const game = await db.query(
-                'SELECT id, status FROM games WHERE id = ? AND status = "race_selection"',
-                [gameId]
-            );
+            const result = await this.queryWithRetry(`
+                UPDATE game_players 
+                SET race_id = NULL, is_ready = 0 
+                WHERE game_id = ? AND player_name = ? AND is_active = 1
+            `, [gameId, playerName], 'deselect race');
 
-            if (game.length === 0) {
-                return { success: false, message: 'Spiel nicht gefunden oder nicht in Rassenwahl-Phase' };
+            if (result.affectedRows === 0) {
+                return { success: false, message: 'Spieler nicht gefunden oder bereits keine Rasse gewählt' };
             }
 
-            // Prüfe ob der Spieler existiert
-            const player = await db.query(
-                'SELECT id, player_name, race_id, race_confirmed FROM game_players WHERE game_id = ? AND player_name = ?',
-                [gameId, playerName]
-            );
-
-            if (player.length === 0) {
-                return { success: false, message: 'Spieler nicht in diesem Spiel gefunden' };
-            }
-
-            // Erlaube Deselection auch von bestätigten Rassen (für "Rasse ändern" Funktion)
-            console.log(`Allowing deselection for player ${playerName} (was confirmed: ${player[0].race_confirmed})`);
-
-            // WICHTIG: Entferne die Rassenwahl komplett aus der Datenbank
-            await db.query(
-                'UPDATE game_players SET race_id = NULL, race_confirmed = 0 WHERE game_id = ? AND player_name = ?',
-                [gameId, playerName]
-            );
-
-            console.log(`✓ Race COMPLETELY REMOVED FROM DATABASE for player ${playerName}`);
+            console.log(`✅ Race deselected for ${playerName}`);
 
             return {
                 success: true,
-                playerName: playerName,
-                wasConfirmed: player[0].race_confirmed === 1
+                message: 'Rassenwahl zurückgenommen'
             };
 
         } catch (error) {
             console.error('Error deselecting race:', error);
-            return { success: false, message: 'Fehler bei der Rassenabwahl: ' + error.message };
+            return { success: false, message: 'Fehler beim Zurücknehmen der Rassenwahl: ' + error.message };
         }
     }
 
-    // Prüfe ob alle Spieler bereit sind
-    async checkAllPlayersReady(gameId) {
+    // Aktuelle Rassenwahlen für ein Spiel abrufen
+    async getRaceSelections(gameId) {
         try {
-            const players = await db.query(`
+            console.log(`Getting race selections for game ${gameId}`);
+
+            const selections = await this.queryWithRetry(`
                 SELECT 
-                    COUNT(*) as total_players,
-                    SUM(CASE WHEN race_confirmed = 1 THEN 1 ELSE 0 END) as ready_players
-                FROM game_players 
-                WHERE game_id = ? AND is_active = 1
-            `, [gameId]);
+                    gp.id,
+                    gp.player_name,
+                    gp.race_id,
+                    gp.is_ready,
+                    r.name as race_name,
+                    r.color_hex as race_color,
+                    r.description as race_description
+                FROM game_players gp
+                LEFT JOIN races r ON gp.race_id = r.id
+                WHERE gp.game_id = ? AND gp.is_active = 1
+                ORDER BY gp.joined_at
+            `, [gameId], 'get race selections');
 
-            const totalCount = players[0].total_players;
-            const readyCount = players[0].ready_players;
-            const allReady = totalCount > 0 && readyCount === totalCount;
-
-            console.log(`Game ${gameId}: ${readyCount}/${totalCount} players ready (all ready: ${allReady})`);
+            console.log(`Found ${selections.length} players in game ${gameId}`);
 
             return {
                 success: true,
-                allReady: allReady,
-                readyCount: readyCount,
-                totalCount: totalCount
+                selections: selections
             };
 
         } catch (error) {
-            console.error('Error checking players ready:', error);
-            return { success: false, message: 'Fehler beim Prüfen der Spielerbereitschaft' };
+            console.error('Error getting race selections:', error);
+            return { success: false, message: 'Fehler beim Laden der Rassenwahlen: ' + error.message };
         }
     }
 
-    // Lade alle Rassenauswahlen für ein Spiel
-async getAllRaceSelections(gameId) {
-    try {
-        console.log(`Getting all race selections for game ${gameId}`);
+    // ✅ HILFSMETHODEN FÜR RETRY-LOGIK
 
-        // Hole alle Spieler und ihre Rassenauswahlen
-        const selections = await db.query(`
-            SELECT 
-                gp.id as player_id,
-                gp.player_name,
-                gp.race_id,
-                gp.race_confirmed,
-                gp.socket_id,
-                r.name as race_name,
-                r.color_hex as race_color
-            FROM game_players gp
-            LEFT JOIN races r ON gp.race_id = r.id
-            WHERE gp.game_id = ? AND gp.is_active = 1
-            ORDER BY gp.player_name
-        `, [gameId]);
-
-        // Statistiken berechnen
-        const stats = await this.getAllConfirmedRaces(gameId);
-
-        console.log(`✅ Race selections retrieved: ${selections.length} players`);
-
-        return {
-            success: true,
-            gameId: gameId,
-            selections: selections,
-            stats: stats
-        };
-
-    } catch (error) {
-        console.error('Error getting race selections:', error);
-        return { success: false, message: 'Fehler beim Laden der Rassenauswahlen: ' + error.message };
-    }
-}
-
-async confirmRaceSelection(gameId, playerName, raceId) {
-    try {
-        console.log(`Confirming race selection: ${playerName} -> Race ${raceId} in game ${gameId}`);
-
-        // Prüfe ob das Spiel existiert und in der richtigen Phase ist
-        const game = await db.query(
-            'SELECT * FROM games WHERE id = ? AND status = "race_selection"',
-            [gameId]
-        );
-
-        if (game.length === 0) {
-            return { success: false, message: 'Spiel nicht gefunden oder nicht in Rassenauswahl-Phase' };
-        }
-
-        // Prüfe ob der Spieler existiert
-        const player = await db.query(
-            'SELECT * FROM game_players WHERE game_id = ? AND player_name = ? AND is_active = 1',
-            [gameId, playerName]
-        );
-
-        if (player.length === 0) {
-            return { success: false, message: 'Spieler nicht in diesem Spiel gefunden' };
-        }
-
-        // Prüfe ob die Rasse bereits ausgewählt ist
-        const currentSelection = await db.query(
-            'SELECT race_id, race_confirmed FROM game_players WHERE game_id = ? AND player_name = ?',
-            [gameId, playerName]
-        );
-
-        if (currentSelection.length > 0 && currentSelection[0].race_id !== raceId) {
-            return { success: false, message: 'Du hast bereits eine andere Rasse ausgewählt' };
-        }
-
-        if (currentSelection.length > 0 && currentSelection[0].race_confirmed === 1) {
-            return { success: false, message: 'Du hast bereits eine Rasse bestätigt' };
-        }
-
-        // Bestätige die Rassenauswahl
-        await db.query(
-            'UPDATE game_players SET race_id = ?, race_confirmed = 1 WHERE game_id = ? AND player_name = ?',
-            [raceId, gameId, playerName]
-        );
-
-        console.log(`✅ Race confirmed: ${playerName} -> Race ${raceId} in game ${gameId}`);
-
-        return {
-            success: true,
-            gameId: gameId,
-            playerName: playerName,
-            raceId: raceId,
-            confirmed: true
-        };
-
-    } catch (error) {
-        console.error('Error confirming race selection:', error);
-        return { success: false, message: 'Fehler beim Bestätigen der Rasse: ' + error.message };
-    }
-}
-
-// Hilfsmethode: Prüfe ob alle Spieler ihre Rassen bestätigt haben
-async getAllConfirmedRaces(gameId) {
-    try {
-        const result = await db.query(`
-            SELECT 
-                COUNT(*) as total_players,
-                SUM(CASE WHEN race_id IS NOT NULL AND race_confirmed = 1 THEN 1 ELSE 0 END) as confirmed_players,
-                SUM(CASE WHEN race_id IS NOT NULL AND race_confirmed = 0 THEN 1 ELSE 0 END) as selected_but_not_confirmed
-            FROM game_players 
-            WHERE game_id = ? AND is_active = 1
-        `, [gameId]);
-
-        const stats = result[0];
+    async queryWithRetry(sql, params, operation) {
+        let retryCount = 0;
+        const maxRetries = 3;
         
-        return {
-            success: true,
-            totalPlayers: stats.total_players,
-            confirmedPlayers: stats.confirmed_players,
-            selectedButNotConfirmed: stats.selected_but_not_confirmed,
-            allConfirmed: stats.total_players > 0 && stats.confirmed_players === stats.total_players
-        };
-
-    } catch (error) {
-        console.error('Error getting confirmed races:', error);
-        return { success: false, message: error.message };
-    }
-}
-
-    // Starte das eigentliche Spiel (nach Rassenauswahl)
-    async startGame(gameId) {
-        try {
-            console.log(`Starting actual game for DB game ${gameId}`);
-
-            // Prüfe ob alle Spieler bereit sind
-            const readyCheck = await this.checkAllPlayersReady(gameId);
-            if (!readyCheck.success || !readyCheck.allReady) {
-                return { success: false, message: 'Nicht alle Spieler haben ihre Rasse ausgewählt' };
+        while (retryCount < maxRetries) {
+            try {
+                return await db.query(sql, params);
+            } catch (error) {
+                retryCount++;
+                console.error(`Database error during ${operation} (attempt ${retryCount}/${maxRetries}):`, error);
+                
+                if (this.isRetryableError(error) && retryCount < maxRetries) {
+                    const delay = 1000 * retryCount; // Exponential backoff
+                    console.log(`🔄 Retrying ${operation} in ${delay}ms...`);
+                    await this.sleep(delay);
+                    continue;
+                }
+                
+                throw error;
             }
-
-            // Update Spielstatus zu "playing"
-            await db.query(
-                'UPDATE games SET status = "playing", started_at = NOW() WHERE id = ?',
-                [gameId]
-            );
-
-            // TODO: Hier würde die Kartengenerierung stattfinden
-            // await this.generateMap(gameId);
-
-            console.log(`✓ Game ${gameId} started successfully`);
-
-            return {
-                success: true,
-                gameId: gameId,
-                message: 'Spiel wurde gestartet'
-            };
-
-        } catch (error) {
-            console.error('Error starting game:', error);
-            return { success: false, message: 'Fehler beim Starten des Spiels: ' + error.message };
         }
     }
 
-    // Hilfsfunktion: Spieler einem Spiel beitreten lassen für Rassenauswahl
-    async joinRaceSelection(gameId, playerName, socketId) {
-        try {
-            console.log(`Player ${playerName} joining race selection for game ${gameId}`);
-
-            // Prüfe ob das Spiel existiert und in der race_selection Phase ist
-            const game = await db.query(
-                'SELECT id, status, max_players FROM games WHERE id = ? AND status = "race_selection"',
-                [gameId]
-            );
-
-            if (game.length === 0) {
-                return { success: false, message: 'Spiel nicht gefunden oder nicht in Rassenauswahl-Phase' };
-            }
-
-            // Prüfe ob der Spieler bereits in diesem Spiel ist
-            const existingPlayer = await db.query(
-                'SELECT id, player_name FROM game_players WHERE game_id = ? AND player_name = ?',
-                [gameId, playerName]
-            );
-
-            if (existingPlayer.length === 0) {
-                return { success: false, message: 'Spieler nicht in diesem Spiel gefunden' };
-            }
-
-            // Update Socket-ID für den Spieler
-            await db.query(
-                'UPDATE game_players SET socket_id = ? WHERE game_id = ? AND player_name = ?',
-                [socketId, gameId, playerName]
-            );
-
-            // Lade Spielerinformationen
-            const totalPlayers = await db.query(
-                'SELECT COUNT(*) as count FROM game_players WHERE game_id = ? AND is_active = 1',
-                [gameId]
-            );
-
-            console.log(`✓ Player ${playerName} joined race selection for game ${gameId}`);
-
-            return {
-                success: true,
-                gameId: gameId,
-                playerName: playerName,
-                totalPlayers: totalPlayers[0].count
-            };
-
-        } catch (error) {
-            console.error('Error joining race selection:', error);
-            return { success: false, message: 'Fehler beim Beitreten der Rassenauswahl: ' + error.message };
-        }
+    isRetryableError(error) {
+        const retryableCodes = [
+            'ECONNRESET',
+            'PROTOCOL_CONNECTION_LOST', 
+            'ETIMEDOUT',
+            'ENOTFOUND',
+            'ER_LOCK_WAIT_TIMEOUT'
+        ];
+        
+        return retryableCodes.includes(error.code) || error.message.includes('ECONNRESET');
     }
 
-    // Spieler verlässt die Rassenauswahl
-    async leaveRaceSelection(gameId, playerName) {
-        try {
-            console.log(`Player ${playerName} leaving race selection for game ${gameId}`);
+    sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
 
-            // Reset race selection für den Spieler
-            await db.query(
-                'UPDATE game_players SET race_id = NULL, race_confirmed = 0, socket_id = NULL WHERE game_id = ? AND player_name = ?',
-                [gameId, playerName]
+    // ✅ BATCH-OPERATIONEN FÜR BESSERE PERFORMANCE
+
+    async batchUpdateRaceSelections(gameId, selections) {
+        try {
+            const updatePromises = selections.map(selection => 
+                this.queryWithRetry(`
+                    UPDATE game_players 
+                    SET race_id = ?, is_ready = ? 
+                    WHERE game_id = ? AND player_name = ? AND is_active = 1
+                `, [selection.raceId, selection.isReady, gameId, selection.playerName], 
+                `batch update for ${selection.playerName}`)
             );
 
-            console.log(`✓ Player ${playerName} left race selection for game ${gameId}`);
-
+            await Promise.all(updatePromises);
             return { success: true };
 
         } catch (error) {
-            console.error('Error leaving race selection:', error);
-            return { success: false, message: 'Fehler beim Verlassen der Rassenauswahl' };
+            console.error('Error in batch race selection update:', error);
+            return { success: false, message: error.message };
         }
+    }
+
+    // ✅ VALIDATION HELPERS
+
+    validateRaceSelection(gameId, playerName, raceId) {
+        if (!gameId || !playerName || !raceId) {
+            return { valid: false, message: 'Fehlende erforderliche Parameter' };
+        }
+
+        if (typeof gameId !== 'string' && typeof gameId !== 'number') {
+            return { valid: false, message: 'Ungültige Spiel-ID' };
+        }
+
+        if (typeof playerName !== 'string' || playerName.trim().length === 0) {
+            return { valid: false, message: 'Ungültiger Spielername' };
+        }
+
+        if (typeof raceId !== 'string' && typeof raceId !== 'number') {
+            return { valid: false, message: 'Ungültige Rassen-ID' };
+        }
+
+        return { valid: true };
     }
 }
 

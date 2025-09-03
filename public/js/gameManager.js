@@ -21,6 +21,9 @@ class GameManager {
         this.possibleAttacks = [];
         this.purchaseMode = false;
         
+        // ✅ Unit Purchase Modal Integration
+        this.unitPurchaseModal = null;
+        
         this.init();
     }
 
@@ -44,6 +47,9 @@ class GameManager {
         
         // Event Listeners
         this.setupEventListeners();
+		
+        // ✅ Unit Purchase Modal initialisieren
+        this.initUnitPurchaseModal();
         
         // Game Renderer initialisieren
         this.gameRenderer = new GameRenderer(this);
@@ -99,6 +105,12 @@ class GameManager {
         this.socket.on('unit_purchased', (data) => {
             console.log('Unit purchased:', data);
             this.handleUnitPurchased(data);
+        });
+		
+        // ✅ Neue Events für Unit Purchase Modal
+        this.socket.on('available_units', (data) => {
+            console.log('Available units received:', data);
+            this.handleAvailableUnits(data);
         });
 
         this.socket.on('turn_ended', (data) => {
@@ -209,6 +221,11 @@ class GameManager {
         if (this.gameRenderer) {
             this.gameRenderer.updateGameState(this.gameState);
         }
+
+        // ✅ Unit Purchase Modal Gold Update
+        if (this.unitPurchaseModal && this.currentPlayer) {
+            this.unitPurchaseModal.updateGold(this.currentPlayer.gold);
+        }
     }
 
     // Turn Started Handler
@@ -255,6 +272,11 @@ class GameManager {
             this.showNotification(`${data.unitName} für ${data.cost} Gold gekauft`, 'success');
             this.purchaseMode = false;
             this.updatePurchaseMode();
+            
+            // ✅ Modal schließen falls offen
+            if (this.unitPurchaseModal) {
+                this.unitPurchaseModal.hide();
+            }
         } else {
             this.showNotification(data.message, 'error');
         }
@@ -416,6 +438,11 @@ class GameManager {
         this.updatePurchaseMode();
         if (this.gameRenderer) {
             this.gameRenderer.disableInteraction();
+        }
+        
+        // ✅ Modal schließen bei Turn-Ende
+        if (this.unitPurchaseModal) {
+            this.unitPurchaseModal.hide();
         }
     }
 
@@ -639,10 +666,74 @@ class GameManager {
             this.showNotification('Wähle eine Aktion aus oder klicke auf eine gültige Position', 'warning');
         }
     }
+	
+    initUnitPurchaseModal() {
+        try {
+            if (typeof UnitPurchaseModal !== 'undefined') {
+                this.unitPurchaseModal = new UnitPurchaseModal(this);
+                console.log('✅ Unit Purchase Modal initialized');
+            } else {
+                console.warn('⚠️ UnitPurchaseModal not available');
+            }
+        } catch (error) {
+            console.error('❌ Error initializing Unit Purchase Modal:', error);
+        }
+    }
 
     showUnitPurchaseDialog(buildingX, buildingY) {
-        // TODO: Implementiere Unit Purchase Dialog
-        console.log(`Show purchase dialog for building at (${buildingX}, ${buildingY})`);
+        if (!this.unitPurchaseModal) {
+            console.error('Unit Purchase Modal not available');
+            this.showError('Einheitenkauf nicht verfügbar');
+            return;
+        }
+
+        if (!this.isMyTurn) {
+            this.showError('Du bist nicht am Zug');
+            return;
+        }
+
+        // Building-Info ermitteln
+        const tile = this.gameState?.map?.find(t => 
+            t.x_coordinate === buildingX && t.y_coordinate === buildingY
+        );
+
+        if (!tile || !tile.building_type_id) {
+            this.showError('Kein Gebäude an dieser Position');
+            return;
+        }
+
+        // Prüfe ob Gebäude dem Spieler gehört
+        if (tile.owner_player_id !== this.currentPlayer?.id) {
+            this.showError('Gebäude gehört dir nicht');
+            return;
+        }
+
+        // Prüfe ob Tile frei ist (keine Einheit darauf)
+        const hasUnit = this.gameState?.units?.some(unit => 
+            unit.x_coordinate === buildingX && unit.y_coordinate === buildingY
+        );
+
+        if (hasUnit) {
+            this.showError('Auf dem Gebäude steht bereits eine Einheit');
+            return;
+        }
+
+        const buildingName = tile.building_name || 'Gebäude';
+        
+        console.log(`📦 Opening unit purchase dialog for ${buildingName} at (${buildingX}, ${buildingY})`);
+
+        // Modal anzeigen
+        this.unitPurchaseModal.show(buildingX, buildingY, buildingName);
+
+        // Purchase Mode deaktivieren
+        this.purchaseMode = false;
+        this.updatePurchaseMode();
+    }
+	
+    handleAvailableUnits(data) {
+        if (this.unitPurchaseModal) {
+            this.unitPurchaseModal.updateAvailableUnits(data.units);
+        }
     }
 
     // Keyboard Input Handler
